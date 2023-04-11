@@ -212,3 +212,5 @@ Install the firmware (in build-PICO/firmware.uf2) on the Pico board in the norma
 NB: there is an issue with the Arm gcc compiler version when building on a Mac. See here for details:
 
 https://github.com/kentindell/canhack/issues/15#issuecomment-1117542310
+
+test edit
