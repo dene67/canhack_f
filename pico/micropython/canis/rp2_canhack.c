@@ -730,6 +730,7 @@ STATIC const mp_map_elem_t rp2_canhack_locals_dict_table[] = {
         { MP_OBJ_NEW_QSTR(MP_QSTR_get_clock), (mp_obj_t)&rp2_canhack_get_clock_obj },
         { MP_OBJ_NEW_QSTR(MP_QSTR_reset_clock), (mp_obj_t)&rp2_canhack_reset_clock_obj },
         { MP_OBJ_NEW_QSTR(MP_QSTR_send_raw), (mp_obj_t)&rp2_canhack_send_raw_obj },
+        { MP_OBJ_NEW_QSTR(MP_QSTR_test_func), (mp_obj_t)&rp2_canhack_test_func_obj }, //test function, to be deleted
 };
 STATIC MP_DEFINE_CONST_DICT(rp2_canhack_locals_dict, rp2_canhack_locals_dict_table);
 
@@ -760,3 +761,29 @@ const mp_obj_type_t rp2_canhack_type = {
         .protocol = &canhack_stream_p,
         .locals_dict = (mp_obj_t)&rp2_canhack_locals_dict,
 };
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//
+// Additional Functions (dene67)
+//
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+STATIC mp_obj_t rp2_canhack_test_func(mp_uint_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_args) {
+
+    static const mp_arg_t allowed_args[] = {
+            { MP_QSTR_input,           MP_ARG_REQUIRED  | MP_ARG_BOOL,  {.u_bool = false} },
+    };
+
+    mp_arg_val_t args[MP_ARRAY_SIZE(allowed_args)];
+    mp_arg_parse_all(n_args - 1, pos_args + 1, kw_args, MP_ARRAY_SIZE(allowed_args), allowed_args, args);
+
+    input = args[0].u_bool;
+
+    reverse_input = test_func(input);
+
+    mp_printf(MP_PYTHON_PRINTER, reverse_input);
+
+    return mp_const_none;
+}
+
+STATIC MP_DEFINE_CONST_FUN_OBJ_KW(rp2_canhack_test_func_obj, 1, rp2_canhack_test_func);
