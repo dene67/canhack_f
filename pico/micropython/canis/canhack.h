@@ -178,6 +178,10 @@ void canhack_set_timeout(uint32_t timeout);
 /// \brief Stop the current operation running
 void canhack_stop(void);
 
+/// \brief test function to reverse input, will be removed
+/// \param input
+bool canhack_test_func(bool input);
+
 #define CANHACK_H
 
 #endif //CANHACK_H

@@ -799,7 +799,7 @@ void canhack_init(void)
 //
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-bool test_func(bool input) //test function, to be deleted
+bool canhack_test_func(bool input) //test function, to be deleted
 {
     if (input) {
         return false;
