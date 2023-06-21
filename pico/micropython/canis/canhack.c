@@ -716,18 +716,21 @@ void canhack_set_frame(uint32_t id_a, uint32_t id_b, bool rtr, bool ide, uint32_
         }
     }
 
+    // set crc_len (only needed for fd)
+    uint32_t crc_len = 17U;
+    if (dlc > 10) {
+        crc_len = 21U;
+    }
+
     frame->tx_bits = 0;
+
     if (fd) {
-        if (dlc > 10) {
-            frame->crc_rg = 1U << 16U;
-        } 
-        else {
-            frame->crc_rg = 1U << 20U;
-        }
+        frame->crc_rg = 1U << (crc_len - 1U);
     } 
     else {
         frame->crc_rg = 0;
     }
+
     frame->stuffing = true;
     frame->crcing = true;
     frame->dominant_bits = 0;
@@ -939,13 +942,6 @@ void canhack_set_frame(uint32_t id_a, uint32_t id_b, bool rtr, bool ide, uint32_
         frame->crcing = false;
 
         // Put crc with FSBs
-        uint32_t crc_len;
-        if (dlc > 10) {
-            crc_len = 17;
-        } 
-        else {
-            crc_len = 21;
-        }
         uint32_t crc_rg = frame->crc_rg << (32U - crc_len);
         for (uint32_t i = 0; i < crc_len; i++) {
             if (crc_rg & 0x80000000U) {
