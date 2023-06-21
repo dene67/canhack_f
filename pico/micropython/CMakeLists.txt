@@ -55,44 +55,8 @@ include(${MICROPY_DIR}/py/usermod.cmake)
 
 add_executable(${MICROPY_TARGET})
 
-if(CAN OR CRYPTOCAN)
-    set(CANDRIVERS_PATH ${MICROPY_PORT_DIR}/canis/candrivers)
-    set(CANDRIVERS_SOURCE_LIB
-        ${CANDRIVERS_PATH}/mcp2517fd/mcp2517fd.c
-    )
-endif()
-
-if(CRYPTOCAN)
-    set(CRYPTOCAN_PATH ${MICROPY_DIR}/lib/cryptocan/src)
-    set(CC_HSM_PATH ${CRYPTOCAN_PATH}/hsm)
-    set(CC_CRYPTOCAN_PATH ${CRYPTOCAN_PATH}/cryptocan)
-endif()
-
 set(MICROPY_QSTRDEFS_PORT
     ${PROJECT_SOURCE_DIR}/qstrdefsport.h
-)
-
-set(HSM_SOURCE_LIB
-    ${CC_HSM_PATH}/swshe/cmac.c
-    ${CC_HSM_PATH}/swshe/cmacdyn.c
-    ${CC_HSM_PATH}/swshe/dececb.c
-    ${CC_HSM_PATH}/swshe/encecb.c
-    ${CC_HSM_PATH}/swshe/exportramkey.c
-    ${CC_HSM_PATH}/swshe/extseed.c
-    ${CC_HSM_PATH}/swshe/getid.c
-    ${CC_HSM_PATH}/swshe/init.c
-    ${CC_HSM_PATH}/swshe/kdf.c
-    ${CC_HSM_PATH}/swshe/loadkey.c
-    ${CC_HSM_PATH}/swshe/platform.c
-    ${CC_HSM_PATH}/swshe/reset.c
-    ${CC_HSM_PATH}/swshe/rng.c
-    ${CC_HSM_PATH}/swshe/swshe.h
-)
-
-set(CRYPTOCAN_SOURCE_LIB
-    ${CC_CRYPTOCAN_PATH}/init.c
-    ${CC_CRYPTOCAN_PATH}/tx.c
-    ${CC_CRYPTOCAN_PATH}/rx.c
 )
 
 set(MIN_SOURCE_LIB
@@ -147,6 +111,8 @@ set(MICROPY_SOURCE_PORT
     uart.c
     canis/common.c
     canis/rp2_min.c
+    canis/canhack.c
+    canis/rp2_canhack.c
 # TODO add Bullseye CCover support for code coverage measurement
 #   /opt/BullseyeCoverage/run/libcov-memoryDump.c
 )
@@ -173,6 +139,7 @@ set(MICROPY_SOURCE_QSTR
     ${PROJECT_SOURCE_DIR}/rp2_flash.c
     ${PROJECT_SOURCE_DIR}/rp2_pio.c
     ${PROJECT_SOURCE_DIR}/canis/rp2_min.c  # TODO make this conditionally included
+    ${PROJECT_SOURCE_DIR}/canis/rp2_canhack.c
 )
 
 set(PICO_SDK_COMPONENTS
@@ -209,84 +176,6 @@ set(PICO_SDK_COMPONENTS
     tinyusb_device
 )
 
-if(CAN OR CRYPTOCAN)
-    list(APPEND MICROPY_SOURCE_PORT
-        ${PROJECT_SOURCE_DIR}/canis/canhack.c
-        ${PROJECT_SOURCE_DIR}/canis/rp2_canhack.c
-        ${PROJECT_SOURCE_DIR}/canis/rp2_can.c
-        ${CANDRIVERS_SOURCE_LIB}
-    )
-    list(APPEND MICROPY_SOURCE_QSTR
-        ${PROJECT_SOURCE_DIR}/canis/rp2_canhack.c
-        ${PROJECT_SOURCE_DIR}/canis/rp2_can.c
-    )
-endif()
-
-if(CRYPTOCAN)
-    list(APPEND MICROPY_SOURCE_PORT
-        ${HSM_SOURCE_LIB}
-        ${CRYPTOCAN_SOURCE_LIB}
-        ${PROJECT_SOURCE_DIR}/canis/rp2_hsm.c
-        ${PROJECT_SOURCE_DIR}/canis/rp2_cryptocan.c
-    )
-    list(APPEND MICROPY_SOURCE_QSTR
-        ${PROJECT_SOURCE_DIR}/canis/rp2_hsm.c
-        ${PROJECT_SOURCE_DIR}/canis/rp2_cryptocan.c
-    )
-endif()
-
-if(MICROPY_PY_BLUETOOTH)
-    list(APPEND MICROPY_SOURCE_PORT mpbthciport.c)
-    target_compile_definitions(${MICROPY_TARGET} PRIVATE
-        MICROPY_PY_BLUETOOTH=1
-        MICROPY_PY_BLUETOOTH_USE_SYNC_EVENTS=1
-        MICROPY_PY_BLUETOOTH_ENABLE_CENTRAL_MODE=1
-        MICROPY_PY_BLUETOOTH_ENABLE_PAIRING_BONDING=1
-        MICROPY_PY_BLUETOOTH_ENABLE_L2CAP_CHANNELS=1
-    )
-endif()
-
-if(MICROPY_BLUETOOTH_NIMBLE)
-    list(APPEND MICROPY_SOURCE_PORT mpnimbleport.c)
-    target_compile_definitions(${MICROPY_TARGET} PRIVATE
-        MICROPY_BLUETOOTH_NIMBLE=1
-        MICROPY_BLUETOOTH_NIMBLE_BINDINGS_ONLY=0
-    )
-    target_compile_options(${MICROPY_TARGET} PRIVATE
-    # TODO: This flag is currently needed to make nimble build.
-    -Wno-unused-but-set-variable
-    )
-    include(${MICROPY_DIR}/extmod/nimble/nimble.cmake)
-    target_link_libraries(${MICROPY_TARGET} micropy_extmod_nimble)
-    get_target_property(NIMBLE_INCLUDE micropy_extmod_nimble INTERFACE_INCLUDE_DIRECTORIES)
-    list(APPEND MICROPY_INC_CORE ${NIMBLE_INCLUDE})
-endif()
-
-if (MICROPY_PY_NETWORK_NINAW10)
-    target_compile_definitions(${MICROPY_TARGET} PRIVATE
-        MICROPY_PY_NETWORK_NINAW10=1
-    )
-
-    target_include_directories(${MICROPY_TARGET} PRIVATE
-        ${MICROPY_DIR}/drivers/ninaw10/
-    )
-
-    # Enable NINA-W10 WiFi and Bluetooth drivers.
-    list(APPEND MICROPY_SOURCE_DRIVERS
-        ${MICROPY_DIR}/drivers/ninaw10/nina_bt_hci.c
-        ${MICROPY_DIR}/drivers/ninaw10/nina_wifi_drv.c
-        ${MICROPY_DIR}/drivers/ninaw10/nina_wifi_bsp.c
-    )
-
-    list(APPEND MICROPY_SOURCE_EXTMOD
-        ${MICROPY_DIR}/extmod/network_ninaw10.c
-    )
-
-    list(APPEND MICROPY_SOURCE_QSTR
-        ${MICROPY_DIR}/extmod/network_ninaw10.c
-    )
-endif()
-
 # Define mpy-cross flags and frozen manifest
 set(MICROPY_CROSS_FLAGS -march=armv7m)
 if (NOT MICROPY_FROZEN_MANIFEST)
@@ -306,8 +195,6 @@ target_link_libraries(${MICROPY_TARGET} usermod)
 
 target_include_directories(${MICROPY_TARGET} PRIVATE
     ${PICO_TINYUSB_PATH}/src
-    ${CRYPTOCAN_PATH}
-    ${CANDRIVERS_PATH}
     ${MICROPY_INC_CORE}
     ${MICROPY_INC_USERMOD}
     ${MICROPY_BOARD_DIR}
@@ -349,38 +236,9 @@ target_compile_definitions(${MICROPY_TARGET} PRIVATE
 )
 
 # Definitions for various targets
-if (CRYPTOCAN)
-    target_compile_definitions(${MICROPY_TARGET} PRIVATE
-        CAN=1
-        CRYPTOCAN=1
-        SM_CPU_LITTLE_ENDIAN=1
-        SM_RAM_TABLES=1
-        SM_KEY_EXPANSION_CACHED=1
-        SM_CODE_IN_RAM=1
-    )
-endif()
-if (CAN OR CRYPTOCAN)
-    target_compile_definitions(${MICROPY_TARGET} PRIVATE
-        CAN=1
-        MCP2517FD=1
-        HOST_CANPICO=1
-    )
-endif()
-if (CHV_DEFCON30_BADGE)
-    target_compile_definitions(${MICROPY_TARGET} PRIVATE
-        CHV_DEFCON30_BADGE=1
-    )
-endif()
-if (CANPICO)
-    target_compile_definitions(${MICROPY_TARGET} PRIVATE
-        CANPICO=1
-    )
-endif()
-if (CANHACK)
-    target_compile_definitions(${MICROPY_TARGET} PRIVATE
-        CANHACK=1
-    )
-endif()
+target_compile_definitions(${MICROPY_TARGET} PRIVATE
+    CANHACK=1
+)
 
 target_link_libraries(${MICROPY_TARGET}
     ${PICO_SDK_COMPONENTS}

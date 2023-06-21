@@ -171,11 +171,14 @@ STATIC mp_obj_t rp2_canhack_set_frame(mp_uint_t n_args, const mp_obj_t *pos_args
             { MP_QSTR_set_dlc,   MP_ARG_KW_ONLY  | MP_ARG_BOOL,  {.u_bool = false} },
             { MP_QSTR_dlc,       MP_ARG_KW_ONLY  | MP_ARG_INT,  {.u_int = 0} },
             { MP_QSTR_second,    MP_ARG_KW_ONLY  | MP_ARG_BOOL,  {.u_bool = false} },
+            { MP_QSTR_fd,        MP_ARG_KW_ONLY  | MP_ARG_BOOL,  {.u_bool = false} },
     };
 
     // parse args
     mp_arg_val_t args[MP_ARRAY_SIZE(allowed_args)];
     mp_arg_parse_all(n_args - 1, pos_args + 1, kw_args, MP_ARRAY_SIZE(allowed_args), allowed_args, args);
+
+    bool fd = args[7].u_bool;
 
     uint32_t can_id = args[0].u_int;
     bool rtr = args[1].u_bool;
@@ -187,13 +190,26 @@ STATIC mp_obj_t rp2_canhack_set_frame(mp_uint_t n_args, const mp_obj_t *pos_args
 
     uint32_t len;
     uint32_t dlc;
-    uint8_t data[8];
+    uint32_t size = 8;
+    if (fd) {
+        size = 64;
+    }
 
+    uint8_t data[size];
+    
     if(data_obj == MP_OBJ_NULL) {
         len = 0;
     }
     else {
-        len = copy_mp_bytes(data_obj, data, 8U);
+        if (fd) {
+            len = copy_mp_bytes(data_obj, data, 64U);
+        } else {
+            len = copy_mp_bytes(data_obj, data, 8U);
+        }
+    }
+
+    for (int i = len; i < size; i++) {
+        data[i] = 0x0;
     }
 
     // DLC can be set if remote, but must have no payload
@@ -201,10 +217,16 @@ STATIC mp_obj_t rp2_canhack_set_frame(mp_uint_t n_args, const mp_obj_t *pos_args
         nlr_raise(mp_obj_new_exception_msg_varg(&mp_type_ValueError, "Remote frames cannot have a payload"));
     }
     // 8 byte frames max
-    if (len > 8U) {
-        nlr_raise(mp_obj_new_exception_msg_varg(&mp_type_ValueError, "Payload cannot be more than 8 bytes"));
-    }
-
+    if (fd) {
+        if (len > 64U) {
+            nlr_raise(mp_obj_new_exception_msg_varg(&mp_type_ValueError, "Payload cannot be more than 64 bytes"));
+        }
+    } else {
+        if (len > 8U) {
+            nlr_raise(mp_obj_new_exception_msg_varg(&mp_type_ValueError, "Payload cannot be more than 8 bytes"));
+        }
+    } 
+        
     if (set_dlc) {
         dlc = args[5].u_int;
         // DLC cannot be > 15
@@ -213,7 +235,19 @@ STATIC mp_obj_t rp2_canhack_set_frame(mp_uint_t n_args, const mp_obj_t *pos_args
         }
     }
     else {
-        dlc = len;
+        if (fd & (len > 8)) {
+            if (len <= 24) {
+                dlc = (len+3) / 4U + 6U;
+            } 
+            else if (len <= 32) {
+                dlc = 13;
+            } 
+            else {
+                dlc = (len+3) / 16 + 11U;
+            }
+        } else {
+            dlc = len;
+        }
     }
 
     uint32_t id_a;
@@ -228,8 +262,9 @@ STATIC mp_obj_t rp2_canhack_set_frame(mp_uint_t n_args, const mp_obj_t *pos_args
         id_a = can_id & 0x7ffU;
         id_b =  0;
     }
+
     canhack_frame_t *frame = canhack_get_frame(second);
-    canhack_set_frame(id_a, id_b, rtr, ide, dlc, data, frame);
+    canhack_set_frame(id_a, id_b, rtr, ide, dlc, data, frame, fd);
 
     return mp_const_none;
 }
@@ -710,44 +745,6 @@ STATIC mp_obj_t rp2_canhack_send_raw(mp_obj_t self_in)
 }
 STATIC MP_DEFINE_CONST_FUN_OBJ_1(rp2_canhack_send_raw_obj, rp2_canhack_send_raw);
 
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//
-// Additional Functions (dene67)
-//
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-STATIC mp_obj_t rp2_canhack_test_func(mp_uint_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_args) {
-
-    static const mp_arg_t allowed_args[] = {
-            { MP_QSTR_input,           MP_ARG_REQUIRED  | MP_ARG_BOOL,  {.u_bool = false} },
-    };
-
-    mp_arg_val_t args[MP_ARRAY_SIZE(allowed_args)];
-    mp_arg_parse_all(n_args - 1, pos_args + 1, kw_args, MP_ARRAY_SIZE(allowed_args), allowed_args, args);
-
-    bool input;
-    bool reverse_input;
-
-    input = args[0].u_bool;
-
-    reverse_input = canhack_test_func(input);
-
-    if (reverse_input) {
-        mp_printf(MP_PYTHON_PRINTER, "true");
-    }
-    else {
-        mp_printf(MP_PYTHON_PRINTER, "false");
-    }
-
-    return mp_const_none;
-}
-
-STATIC MP_DEFINE_CONST_FUN_OBJ_KW(rp2_canhack_test_func_obj, 1, rp2_canhack_test_func);
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-
 STATIC const mp_map_elem_t rp2_canhack_locals_dict_table[] = {
         // instance methods
         { MP_OBJ_NEW_QSTR(MP_QSTR_init), (mp_obj_t)&rp2_canhack_init_obj },
@@ -767,7 +764,6 @@ STATIC const mp_map_elem_t rp2_canhack_locals_dict_table[] = {
         { MP_OBJ_NEW_QSTR(MP_QSTR_get_clock), (mp_obj_t)&rp2_canhack_get_clock_obj },
         { MP_OBJ_NEW_QSTR(MP_QSTR_reset_clock), (mp_obj_t)&rp2_canhack_reset_clock_obj },
         { MP_OBJ_NEW_QSTR(MP_QSTR_send_raw), (mp_obj_t)&rp2_canhack_send_raw_obj },
-        { MP_OBJ_NEW_QSTR(MP_QSTR_test_func), (mp_obj_t)&rp2_canhack_test_func_obj }, //test function, to be deleted
 };
 STATIC MP_DEFINE_CONST_DICT(rp2_canhack_locals_dict, rp2_canhack_locals_dict_table);
 

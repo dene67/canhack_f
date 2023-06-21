@@ -89,6 +89,9 @@ int main(int argc, char **argv) {
     mp_thread_init();
     #endif
 
+    // Set System Clock to 130 MHz to enable FD support
+    set_sys_clock_khz(130000, true);
+
     // Start and initialise the RTC
     datetime_t t = {
         .year = 2021,

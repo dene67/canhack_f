@@ -34,6 +34,8 @@
 
 struct canhack;
 
+char str[10];
+
 // This is the CAN frame bit pattern that will be transmitted after observing 11 idle bits
 struct canhack {
     canhack_frame_t can_frame1;                 // CAN frame shared with API
@@ -72,6 +74,10 @@ TIME_CRITICAL void canhack_stop(void)
 TIME_CRITICAL bool send_bits(ctr_t bit_end, ctr_t sample_point, struct canhack *canhack_p, uint8_t tx_index, canhack_frame_t *frame)
 {
     ctr_t now;
+    ctr_t time = 0;
+    ctr_t s_time = 0;
+    ctr_t highest_time = 0;
+    ctr_t highest_s_time = 0;
     uint32_t rx;
     uint8_t tx = frame->tx_bitstream[tx_index++];
     uint8_t cur_tx = tx;
@@ -91,7 +97,14 @@ TIME_CRITICAL bool send_bits(ctr_t bit_end, ctr_t sample_point, struct canhack *
                 // Finished
                 SET_CAN_TX_REC();
                 canhack_p->sent = true;
+                mp_printf(MP_PYTHON_PRINTER, "send time: %u \n", highest_time);
+                mp_printf(MP_PYTHON_PRINTER, "sample time: %u \n", highest_s_time);
                 return false;
+            }
+
+            time = GET_CLOCK() - now;
+            if (REACHED(time, highest_time)) {
+                highest_time = time;
             }
         }
         if (REACHED(now, sample_point)) {
@@ -102,6 +115,11 @@ TIME_CRITICAL bool send_bits(ctr_t bit_end, ctr_t sample_point, struct canhack *
                     return true;
             }
             sample_point = ADVANCE(sample_point, BIT_TIME);
+
+            s_time = GET_CLOCK() - now;
+            if (REACHED(s_time, highest_s_time)) {
+                highest_s_time = s_time;
+            }
         }
         if (canhack.canhack_timeout-- == 0) {
             SET_CAN_TX_REC();
@@ -564,9 +582,16 @@ static void add_raw_bit(uint8_t bit, bool stuff, canhack_frame_t *frame)
 {
     // Record the status of the stuff bit for display purposes
     frame->stuff_bit[frame->tx_bits] = stuff;
+    if (stuff) {
+        frame->stuff_count++;                       // raise stuff count (only needed in fd frames)
+    }
     frame->tx_bitstream[frame->tx_bits++] = bit;
+    sprintf(str, "%08lx", frame->tx_bits);
+    mp_printf(MP_PYTHON_PRINTER, str);
+    mp_printf(MP_PYTHON_PRINTER, "\n");
 }
 
+// CRC for normal CAN
 static void do_crc(uint8_t bitval, canhack_frame_t *frame)
 {
     uint32_t bit_14 = (frame->crc_rg & (1U << 14U)) >> 14U;
@@ -578,30 +603,90 @@ static void do_crc(uint8_t bitval, canhack_frame_t *frame)
     }
 }
 
-static void add_bit(uint8_t bit, canhack_frame_t *frame)
+// CRC for CAN FD
+static void do_crc17(uint8_t bitval, canhack_frame_t *frame)
+{
+    uint32_t bit_16 = (frame->crc_rg & (1U << 16U)) >> 16U;
+    uint32_t crc_nxt = bitval ^ bit_16;
+    frame->crc_rg <<= 1U;
+    frame->crc_rg &= 0x1ffffU;
+    if (crc_nxt) {
+        frame->crc_rg ^= 0x1685bU;
+    }
+}
+
+// CRC for extended CAN FD
+static void do_crc21(uint8_t bitval, canhack_frame_t *frame)
+{
+    uint32_t bit_20 = (frame->crc_rg & (1U << 20U)) >> 20U;
+    uint32_t crc_nxt = bitval ^ bit_20;
+    frame->crc_rg <<= 1U;
+    frame->crc_rg &= 0x1fffffU;
+    if (crc_nxt) {
+        frame->crc_rg ^= 0x102899U;
+    }
+}
+
+static void add_bit(uint8_t bit, canhack_frame_t *frame, uint32_t dlc, bool fd)
 {
     if (frame->crcing) {
-        do_crc(bit, frame);
+        if (fd) {
+            if (dlc > 10) {
+                do_crc21(bit, frame);
+            } 
+            else {
+                do_crc17(bit, frame);
+            }
+        } 
+        else {
+            do_crc(bit, frame);
+        }
     }
     add_raw_bit(bit, false, frame);
     if (bit) {
         frame->recessive_bits++;
         frame->dominant_bits = 0;
-    } else {
+    } 
+    else {
         frame->dominant_bits++;
         frame->recessive_bits = 0;
     }
     if (frame->stuffing) {
+
         if (frame->dominant_bits >= 5U) {
+
+            if (fd) {
+                if (dlc > 10) {
+                    do_crc21(1U, frame);
+                } 
+                else {
+                    do_crc17(1U, frame);
+                }
+            }
+
             add_raw_bit(1U, true, frame);
             frame->dominant_bits = 0;
             frame->recessive_bits = 1U;
         }
+
         if (frame->recessive_bits >= 5U) {
+
+            if (fd) {
+                if (dlc > 10) {
+                    do_crc21(0, frame);
+                } 
+                else {
+                    do_crc17(0, frame);
+                }
+            }
+            
             add_raw_bit(0, true, frame);
             frame->dominant_bits = 1U;
             frame->recessive_bits = 0;
         }
+    } 
+    else {
+
     }
 }
 
@@ -611,19 +696,46 @@ static void add_bit(uint8_t bit, canhack_frame_t *frame)
 //
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void canhack_set_frame(uint32_t id_a, uint32_t id_b, bool rtr, bool ide, uint32_t dlc, const uint8_t *data, canhack_frame_t *frame)
+void canhack_set_frame(uint32_t id_a, uint32_t id_b, bool rtr, bool ide, uint32_t dlc, const uint8_t *data, canhack_frame_t *frame, bool fd)
 {
-    uint8_t len = rtr ? 0 : (dlc >= 8U ? 8U : dlc); // RTR frames have a DLC of any value but no data field
+    uint8_t len = 0;    // RTR frames have a DLC of any value but no data field
+    if (!rtr) {
+        if (fd & (dlc > 8)) {
+            if (dlc <= 12) {
+                len = 4U * (dlc - 6U);
+            } 
+            else if (dlc == 13) {
+                len = 32;
+            } 
+            else {
+                len = 16U * (dlc - 11U);
+            }
+        } 
+        else {
+            len = dlc >= 8U ? 8U : dlc;
+        }
+    }
 
     frame->tx_bits = 0;
-    frame->crc_rg = 0;
+    if (fd) {
+        if (dlc > 10) {
+            frame->crc_rg = 1U << 16U;
+        } 
+        else {
+            frame->crc_rg = 1U << 20U;
+        }
+    } 
+    else {
+        frame->crc_rg = 0;
+    }
     frame->stuffing = true;
     frame->crcing = true;
     frame->dominant_bits = 0;
     frame->recessive_bits = 0;
+    frame->stuff_count = 0;
 
     for (uint32_t i = 0; i < CANHACK_MAX_BITS; i++) {
-        frame->tx_bitstream[i] = 1U;
+        frame->tx_bitstream[i] = 0;
     }
 
     // ID field is:
@@ -631,37 +743,42 @@ void canhack_set_frame(uint32_t id_a, uint32_t id_b, bool rtr, bool ide, uint32_
     // {SOF, ID A, SRR = 1, IDE = 1, ID B, RTR, r1, r0) [Extended]
 
     // SOF
-    add_bit(0, frame);
+    add_bit(0, frame, dlc, fd);
 
     // ID A
     id_a <<= 21U;
     for (uint32_t i = 0; i < 11U; i++) {
         if (id_a & 0x80000000U) {
-            add_bit(1U, frame);
+            add_bit(1U, frame, dlc, fd);
         }
         else {
-            add_bit(0, frame);
+            add_bit(0, frame, dlc, fd);
         }
         id_a <<= 1U;
     }
 
-    // RTR/SRR
+    // RTR/SRR (RRS for non extended FD)
     if (rtr || ide) {
-        add_bit(1U, frame);
+        add_bit(1U, frame, dlc, fd); // SRR
     }
     else {
-        add_bit(0, frame);
+        add_bit(0, frame, dlc, fd); // RTR or RRS
     }
 
     // The last bit of the arbitration field is the RTR bit if a basic frame; this might be overwritten if IDE = 1
     frame->last_arbitration_bit = frame->tx_bits - 1U;
+    mp_printf(MP_PYTHON_PRINTER, "________ \n");
+    sprintf(str, "%08lx", frame->last_arbitration_bit);
+    mp_printf(MP_PYTHON_PRINTER, str);    
+    mp_printf(MP_PYTHON_PRINTER, "\n");
+
 
     // IDE
     if (ide) {
-        add_bit(1U, frame);
+        add_bit(1U, frame, dlc, fd);
     }
     else {
-        add_bit(0, frame);
+        add_bit(0, frame, dlc, fd);
     }
 
     if (ide) {
@@ -669,69 +786,182 @@ void canhack_set_frame(uint32_t id_a, uint32_t id_b, bool rtr, bool ide, uint32_
         id_b <<= 14U;
         for (uint32_t i = 0; i < 18U; i++) {
             if (id_b & 0x80000000U) {
-                add_bit(1U, frame);
-            } else {
-                add_bit(0, frame);
+                add_bit(1U, frame, dlc, fd);
+            } 
+            else {
+                add_bit(0, frame, dlc, fd);
             }
             id_b <<= 1U;
         }
-        // RTR
+        // RTR (RRS for fd)
         if (rtr) {
-            add_bit(1U, frame);
+            add_bit(1U, frame, dlc, fd);
         }
         else {
-            add_bit(0, frame);
+            add_bit(0, frame, dlc, fd);
         }
         // The RTR bit is the last bit in the arbitration field if an extended frame
         frame->last_arbitration_bit = frame->tx_bits - 1U;
 
-        // r1
-        add_bit(0, frame);
+        // r1 (FDF in extended FD frames)
+        if (fd) {
+            add_bit(1U, frame, dlc, fd);
+        } 
+        else {
+            add_bit(0, frame, dlc, fd);
+        }
     }
     else {
         // If IDE = 0 then the last arbitration field bit is the RTR
     }
-    // r0
-    add_bit(0, frame);
+
+    // FDF for non extended FD frames
+    if (fd & !ide) {
+        add_bit(1U, frame, dlc, fd);
+    }
+
+    // r0 (res in FD frames)
+    add_bit(0, frame, dlc, fd);
+
+    // Additional bits for FD
+    if (fd) {
+
+        // BRS bit rate switch
+        bool brs = true; // TODO: make optional
+        if (brs) {
+            add_bit(1U, frame, dlc, fd);
+        } 
+        else {
+            add_bit(0, frame, dlc, fd);
+        }
+
+        // ESI
+        bool error_active = true; // TODO: make optional
+        if (error_active) {
+            add_bit(0, frame, dlc, fd);
+        } 
+        else {
+            add_bit(1, frame, dlc, fd);
+        }
+    }
 
     // DLC
     dlc <<= 28U;
     for (uint32_t i = 0; i < 4U; i++) {
         if (dlc & 0x80000000U) {
-            add_bit(1U, frame);
-        } else {
-            add_bit(0, frame);
+            add_bit(1U, frame, dlc, fd);
+        } 
+        else {
+            add_bit(0, frame, dlc, fd);
         }
         dlc <<= 1U;
     }
     frame->last_dlc_bit = frame->tx_bits - 1U;
+    mp_printf(MP_PYTHON_PRINTER, "________ \n");
+    sprintf(str, "%08lx", frame->last_dlc_bit);
+    mp_printf(MP_PYTHON_PRINTER, str);    
+    mp_printf(MP_PYTHON_PRINTER, "\n");
+
 
     // Data
     for (uint32_t i = 0; i < len; i ++) {
         uint8_t byte = data[i];
         for (uint32_t j = 0; j < 8; j++) {
             if (byte & 0x80U) {
-                add_bit(1U, frame);
-            }
+                add_bit(1U, frame, dlc, fd);
+            } 
             else {
-                add_bit(0, frame);
+                add_bit(0, frame, dlc, fd);
             }
             byte <<= 1U;
         }
     }
+
     // If the length is 0 then the last data bit is equal to the last DLC bit
     frame->last_data_bit = frame->tx_bits - 1U;
+    mp_printf(MP_PYTHON_PRINTER, "________ \n");
+    sprintf(str, "%08lx", frame->last_data_bit);
+    mp_printf(MP_PYTHON_PRINTER, str);    
+    mp_printf(MP_PYTHON_PRINTER, "\n");
 
-    // CRC
-    frame->crcing = false;
-    uint32_t crc_rg = frame->crc_rg << 17U;
-    for (uint32_t i = 0; i < 15U; i++) {
-        if (crc_rg & 0x80000000U) {
-            add_bit(1U, frame);
-        } else {
-            add_bit(0, frame);
-        }
+
+    // CRC for CAN
+    if (!fd) {
+        frame->crcing = false;
+        uint32_t crc_rg = frame->crc_rg << 17U;
+        for (uint32_t i = 0; i < 15; i++) {
+            if (crc_rg & 0x80000000U) {
+                add_bit(1U, frame, dlc, fd);
+            } 
+            else {
+                add_bit(0, frame, dlc, fd);
+            }
         crc_rg <<= 1U;
+        }    
+    } 
+    // CRC and STC for FD
+    else {
+        frame->stuffing = false;
+        uint8_t stc = frame->stuff_count % 8;
+        uint8_t parity = frame->stuff_count % 2;
+
+        // First FSB
+        if (!frame->stuff_bit[frame->last_data_bit]) {
+            if (frame->tx_bitstream[frame->last_data_bit]) {
+                add_raw_bit(0, true, frame);
+            } 
+            else {
+                add_raw_bit(1U, true, frame);
+            }
+        }
+
+        // Stuff Count and Parity
+        for (uint32_t i = 0; i < 3; i++) {
+            if (stc & 0x4U) {
+                add_bit(1U, frame, dlc, fd);
+            } 
+            else {
+                add_bit(0, frame, dlc, fd);
+            }
+            stc <<= 1U;
+        }
+        add_bit(parity & 0x1U, frame, dlc, fd);
+
+        // Second FSB
+        if (parity & 0x1U) {
+            add_raw_bit(0, true, frame);
+        } 
+        else {
+            add_raw_bit(1U, true, frame);
+        }
+
+        // Stop crc
+        frame->crcing = false;
+
+        // Put crc with FSBs
+        uint32_t crc_len;
+        if (dlc > 10) {
+            crc_len = 17;
+        } 
+        else {
+            crc_len = 21;
+        }
+        uint32_t crc_rg = frame->crc_rg << (32U - crc_len);
+        for (uint32_t i = 0; i < crc_len; i++) {
+            if (crc_rg & 0x80000000U) {
+                add_bit(1U, frame, dlc, fd);
+                if ((i+1)%4 == 0) {
+                    add_raw_bit(0, true, frame);
+                }
+            }
+            else {
+                add_bit(0, frame, dlc, fd);
+                if ((i+1)%4 == 0) {
+                    add_raw_bit(1U, true, frame);
+                }
+            }
+            crc_rg <<= 1U;
+        }
     }
     frame->last_crc_bit = frame->tx_bits - 1U;
 
@@ -739,33 +969,52 @@ void canhack_set_frame(uint32_t id_a, uint32_t id_b, bool rtr, bool ide, uint32_
     frame->stuffing = false;
 
     // CRC delimiter
-    add_bit(1U, frame);
+    add_bit(1U, frame, dlc, fd);
 
     // ACK; we transmit this as a dominant bit to ensure the state machines lock on to the right
     // EOF field; it's mostly moot since if there are no CAN controllers then there is not much
     // hacking to do.
-    add_bit(0, frame);
+    add_bit(0, frame, dlc, fd);
 
     // ACK delimiter
-    add_bit(1U, frame);
+    add_bit(1U, frame, dlc, fd);
 
     // EOF
-    add_bit(1U, frame);
-    add_bit(1U, frame);
-    add_bit(1U, frame);
-    add_bit(1U, frame);
-    add_bit(1U, frame);
-    add_bit(1U, frame);
-    add_bit(1U, frame);
+    add_bit(1U, frame, dlc, fd);
+    add_bit(1U, frame, dlc, fd);
+    add_bit(1U, frame, dlc, fd);
+    add_bit(1U, frame, dlc, fd);
+    add_bit(1U, frame, dlc, fd);
+    add_bit(1U, frame, dlc, fd);
+    add_bit(1U, frame, dlc, fd);
     frame->last_eof_bit = frame->tx_bits - 1U;
 
     // IFS
-    add_bit(1U, frame);
-    add_bit(1U, frame);
-    add_bit(1U, frame);
+    add_bit(1U, frame, dlc, fd);
+    add_bit(1U, frame, dlc, fd);
+    add_bit(1U, frame, dlc, fd);
 
     // Set up the matching masks for this CAN frame
     frame->tx_arbitration_bits = frame->last_arbitration_bit + 1U;
+
+    sprintf(str, "%08lx", frame->last_arbitration_bit);
+    mp_printf(MP_PYTHON_PRINTER, str);    
+    mp_printf(MP_PYTHON_PRINTER, "\n");
+    sprintf(str, "%08lx", frame->last_dlc_bit);
+    mp_printf(MP_PYTHON_PRINTER, str);
+    mp_printf(MP_PYTHON_PRINTER, "\n");
+    sprintf(str, "%08lx", frame->last_data_bit);
+    mp_printf(MP_PYTHON_PRINTER, str);
+    mp_printf(MP_PYTHON_PRINTER, "\n");
+    sprintf(str, "%08lx", frame->last_crc_bit);
+    mp_printf(MP_PYTHON_PRINTER, str);    
+    mp_printf(MP_PYTHON_PRINTER, "\n");
+    sprintf(str, "%08lx", frame->last_eof_bit);
+    mp_printf(MP_PYTHON_PRINTER, str);
+    mp_printf(MP_PYTHON_PRINTER, "\n");
+    sprintf(str, "%08lx", frame->tx_bits);
+    mp_printf(MP_PYTHON_PRINTER, str);
+    mp_printf(MP_PYTHON_PRINTER, "\n");
 
     frame->frame_set = true;
 }
@@ -791,20 +1040,4 @@ void canhack_init(void)
 {
     canhack.can_frame1.frame_set = false;
     canhack.can_frame2.frame_set = false;
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//
-// Additional Functions (dene67)
-//
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-bool canhack_test_func(bool input) //test function, to be deleted
-{
-    if (input) {
-        return false;
-    }
-    else {
-        return true;
-    }
 }

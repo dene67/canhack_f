@@ -46,8 +46,10 @@ STATIC const mp_rom_map_elem_t rp2_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_StateMachine),        MP_ROM_PTR(&rp2_state_machine_type) },
 
     { MP_ROM_QSTR(MP_QSTR_dht_readinto),        MP_ROM_PTR(&dht_readinto_obj) },
-    #ifdef CAN
+    #if defined(CANHACK) || defined(CANHACK_FD)
     { MP_ROM_QSTR(MP_QSTR_CANHack),             MP_ROM_PTR(&rp2_canhack_type) },
+    #endif
+    #ifdef CAN
     { MP_ROM_QSTR(MP_QSTR_CAN),                 MP_ROM_PTR(&rp2_can_type) },
     { MP_ROM_QSTR(MP_QSTR_CANID),               MP_ROM_PTR(&rp2_canid_type) },
     { MP_ROM_QSTR(MP_QSTR_CANFrame),            MP_ROM_PTR(&rp2_canframe_type) },
