@@ -38,8 +38,12 @@ char str[10];
 
 // This is the CAN frame bit pattern that will be transmitted after observing 11 idle bits
 struct canhack {
+
+    uint32_t poison1;
     canhack_frame_t can_frame1;                 // CAN frame shared with API
+    uint32_t poison2;
     canhack_frame_t can_frame2;                 // CAN frame shared with API
+    uint32_t poison3;
 
     // Status
     bool sent;                                  // Indicates if frame sent or not
@@ -54,9 +58,83 @@ struct canhack {
         uint32_t attack_cntdn;
         uint32_t dominant_bit_cntdn;
     } attack_parameters;
+    
+    uint32_t poison4;
+
 };
 
 struct canhack canhack;
+
+// For testing
+static void checkbeef(canhack_frame_t *frame) 
+{
+    if (canhack.poison1 != 0xDEADBEEF) {
+        mp_printf(MP_PYTHON_PRINTER, "canhack poison 1 \n");
+    }
+    if (canhack.poison2 != 0xDEADBEEF) {
+        mp_printf(MP_PYTHON_PRINTER, "canhack poison 2 \n");
+    }
+    if (canhack.poison3 != 0xDEADBEEF) {
+        mp_printf(MP_PYTHON_PRINTER, "canhack poison 3 \n");
+    }
+    if (canhack.poison4 != 0xDEADBEEF) {
+        mp_printf(MP_PYTHON_PRINTER, "canhack poison 4 \n");
+    }
+
+    if (frame->poison1 != 0xDEADBEEF) {
+        mp_printf(MP_PYTHON_PRINTER, "frame poison 1 \n");
+    }
+    if (frame->poison2 != 0xDEADBEEF) {
+        mp_printf(MP_PYTHON_PRINTER, "frame poison 2 \n");
+    }
+    if (frame->poison3 != 0xDEADBEEF) {
+        mp_printf(MP_PYTHON_PRINTER, "frame poison 3 \n");
+    }
+    if (frame->poison4 != 0xDEADBEEF) {
+        mp_printf(MP_PYTHON_PRINTER, "frame poison 4 \n");
+    }
+    if (frame->poison5 != 0xDEADBEEF) {
+        mp_printf(MP_PYTHON_PRINTER, "frame poison 5 \n");
+    }
+    if (frame->poison6 != 0xDEADBEEF) {
+        mp_printf(MP_PYTHON_PRINTER, "frame poison 6 \n");
+    }
+    if (frame->poison7 != 0xDEADBEEF) {
+        mp_printf(MP_PYTHON_PRINTER, "frame poison 7 \n");
+    }
+    if (frame->poison8 != 0xDEADBEEF) {
+        mp_printf(MP_PYTHON_PRINTER, "frame poison 8 \n");
+    }
+    if (frame->poison9 != 0xDEADBEEF) {
+        mp_printf(MP_PYTHON_PRINTER, "frame poison 9 \n");
+    }
+    if (frame->poison10 != 0xDEADBEEF) {
+        mp_printf(MP_PYTHON_PRINTER, "frame poison 10 \n");
+    }
+    if (frame->poison11 != 0xDEADBEEF) {
+        mp_printf(MP_PYTHON_PRINTER, "frame poison 11 \n");
+    }
+}
+
+static void setbeef (canhack_frame_t *frame) 
+{
+    canhack.poison1 = 0xDEADBEEF;
+    canhack.poison2 = 0xDEADBEEF;
+    canhack.poison3 = 0xDEADBEEF;
+    canhack.poison4 = 0xDEADBEEF;
+
+    frame->poison1 = 0xDEADBEEF;
+    frame->poison2 = 0xDEADBEEF;
+    frame->poison3 = 0xDEADBEEF;
+    frame->poison4 = 0xDEADBEEF;
+    frame->poison5 = 0xDEADBEEF;
+    frame->poison6 = 0xDEADBEEF;
+    frame->poison7 = 0xDEADBEEF;
+    frame->poison8 = 0xDEADBEEF;
+    frame->poison9 = 0xDEADBEEF;
+    frame->poison10 = 0xDEADBEEF;
+    frame->poison11 = 0xDEADBEEF;
+}
 
 TIME_CRITICAL void canhack_set_timeout(uint32_t timeout)
 {
@@ -589,6 +667,7 @@ static void add_raw_bit(uint8_t bit, bool stuff, canhack_frame_t *frame)
     sprintf(str, "%08lx", frame->tx_bits);
     mp_printf(MP_PYTHON_PRINTER, str);
     mp_printf(MP_PYTHON_PRINTER, "\n");
+    checkbeef(frame);
 }
 
 // CRC for normal CAN
@@ -698,6 +777,7 @@ static void add_bit(uint8_t bit, canhack_frame_t *frame, uint32_t dlc, bool fd)
 
 void canhack_set_frame(uint32_t id_a, uint32_t id_b, bool rtr, bool ide, uint32_t dlc, const uint8_t *data, canhack_frame_t *frame, bool fd)
 {
+    setbeef(frame);
     uint8_t len = 0;    // RTR frames have a DLC of any value but no data field
     if (!rtr) {
         if (fd & (dlc > 8)) {
