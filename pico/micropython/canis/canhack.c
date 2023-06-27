@@ -614,7 +614,7 @@ static void do_crc17(uint8_t bitval, canhack_frame_t *frame)
     }
 }
 
-// CRC for extended CAN FD
+// CRC for CAN FD (13+ data bytes)
 static void do_crc21(uint8_t bitval, canhack_frame_t *frame)
 {
     uint32_t bit_20 = (frame->crc_rg & (1U << 20U)) >> 20U;
@@ -628,6 +628,7 @@ static void do_crc21(uint8_t bitval, canhack_frame_t *frame)
 
 static void add_bit(uint8_t bit, canhack_frame_t *frame, uint32_t dlc, bool fd)
 {
+    // Choose crc based on CAN type and dlc
     if (frame->crcing) {
         if (fd) {
             if (dlc > 10) {
@@ -641,6 +642,8 @@ static void add_bit(uint8_t bit, canhack_frame_t *frame, uint32_t dlc, bool fd)
             do_crc(bit, frame);
         }
     }
+
+    // Add bit to bitstream and count up for potential stuff bits
     add_raw_bit(bit, false, frame);
     if (bit) {
         frame->recessive_bits++;
@@ -654,6 +657,7 @@ static void add_bit(uint8_t bit, canhack_frame_t *frame, uint32_t dlc, bool fd)
 
         if (frame->dominant_bits >= 5U) {
 
+            // stuff bits count into crc in FD frames
             if (fd) {
                 if (dlc > 10) {
                     do_crc21(1U, frame);
@@ -670,6 +674,7 @@ static void add_bit(uint8_t bit, canhack_frame_t *frame, uint32_t dlc, bool fd)
 
         if (frame->recessive_bits >= 5U) {
 
+            // stuff bits count into crc in FD frames
             if (fd) {
                 if (dlc > 10) {
                     do_crc21(0, frame);
