@@ -114,6 +114,18 @@ static void checkbeef(canhack_frame_t *frame)
     if (frame->poison11 != 0xDEADBEEF) {
         mp_printf(MP_PYTHON_PRINTER, "frame poison 11 \n");
     }
+
+    char tmp[10];
+    sprintf(tmp, "%08x", CANHACK_MAX_BITS);   
+    mp_printf(MP_PYTHON_PRINTER, "MB: ");
+    mp_printf(MP_PYTHON_PRINTER, tmp);
+    mp_printf(MP_PYTHON_PRINTER, "\n");
+    uint32_t sz = sizeof(frame->tx_bitstream);
+    sprintf(tmp, "%08lx", sz);
+    mp_printf(MP_PYTHON_PRINTER, "SZ: ");
+    mp_printf(MP_PYTHON_PRINTER, tmp);
+    mp_printf(MP_PYTHON_PRINTER, "\n");
+
 }
 
 static void setbeef (canhack_frame_t *frame) 

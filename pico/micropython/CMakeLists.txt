@@ -240,6 +240,12 @@ target_compile_definitions(${MICROPY_TARGET} PRIVATE
     CANHACK=1
 )
 
+if (CANHACK_FD)
+target_compile_definitions(${MICROPY_TARGET} PRIVATE
+    CANHACK_FD=1
+)
+endif()
+
 target_link_libraries(${MICROPY_TARGET}
     ${PICO_SDK_COMPONENTS}
 )

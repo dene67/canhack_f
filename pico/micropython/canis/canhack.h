@@ -82,11 +82,7 @@
 #include CANHACK_BOARD_H
 #include <stdio.h>
 
-#ifdef CANHACK_FD
-#define CANHACK_MAX_BITS                        (700U) // CAN FD can have up to 64 data bytes
-#else
-#define CANHACK_MAX_BITS                        (160U)
-#endif
+#define CANHACK_MAX_BITS ((CANHACK_FD == 1 ? 700U : 160U))
 
 /// Structure that defines a CAN frame parameters
 typedef struct {

@@ -1,4 +1,8 @@
 {
     "cmake.configureOnOpen": false,
-    "cmake.sourceDirectory": "/home/seclab/canhack_f/pico/micropython"
+    "cmake.sourceDirectory": "/home/seclab/canhack_f/pico/micropython",
+    "C_Cpp.dimInactiveRegions": false,
+    "files.associations": {
+        "inttypes.h": "c"
+    }
 }
