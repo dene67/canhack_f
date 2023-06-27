@@ -39,11 +39,8 @@ char str[10];
 // This is the CAN frame bit pattern that will be transmitted after observing 11 idle bits
 struct canhack {
 
-    uint32_t poison1;
     canhack_frame_t can_frame1;                 // CAN frame shared with API
-    uint32_t poison2;
     canhack_frame_t can_frame2;                 // CAN frame shared with API
-    uint32_t poison3;
 
     // Status
     bool sent;                                  // Indicates if frame sent or not
@@ -59,94 +56,9 @@ struct canhack {
         uint32_t dominant_bit_cntdn;
     } attack_parameters;
     
-    uint32_t poison4;
-
 };
 
 struct canhack canhack;
-
-// For testing
-static void checkbeef(canhack_frame_t *frame) 
-{
-    if (canhack.poison1 != 0xDEADBEEF) {
-        mp_printf(MP_PYTHON_PRINTER, "canhack poison 1 \n");
-    }
-    if (canhack.poison2 != 0xDEADBEEF) {
-        mp_printf(MP_PYTHON_PRINTER, "canhack poison 2 \n");
-    }
-    if (canhack.poison3 != 0xDEADBEEF) {
-        mp_printf(MP_PYTHON_PRINTER, "canhack poison 3 \n");
-    }
-    if (canhack.poison4 != 0xDEADBEEF) {
-        mp_printf(MP_PYTHON_PRINTER, "canhack poison 4 \n");
-    }
-
-    if (frame->poison1 != 0xDEADBEEF) {
-        mp_printf(MP_PYTHON_PRINTER, "frame poison 1 \n");
-    }
-    if (frame->poison2 != 0xDEADBEEF) {
-        mp_printf(MP_PYTHON_PRINTER, "frame poison 2 \n");
-    }
-    if (frame->poison3 != 0xDEADBEEF) {
-        mp_printf(MP_PYTHON_PRINTER, "frame poison 3 \n");
-    }
-    if (frame->poison4 != 0xDEADBEEF) {
-        mp_printf(MP_PYTHON_PRINTER, "frame poison 4 \n");
-    }
-    if (frame->poison5 != 0xDEADBEEF) {
-        mp_printf(MP_PYTHON_PRINTER, "frame poison 5 \n");
-    }
-    if (frame->poison6 != 0xDEADBEEF) {
-        mp_printf(MP_PYTHON_PRINTER, "frame poison 6 \n");
-    }
-    if (frame->poison7 != 0xDEADBEEF) {
-        mp_printf(MP_PYTHON_PRINTER, "frame poison 7 \n");
-    }
-    if (frame->poison8 != 0xDEADBEEF) {
-        mp_printf(MP_PYTHON_PRINTER, "frame poison 8 \n");
-    }
-    if (frame->poison9 != 0xDEADBEEF) {
-        mp_printf(MP_PYTHON_PRINTER, "frame poison 9 \n");
-    }
-    if (frame->poison10 != 0xDEADBEEF) {
-        mp_printf(MP_PYTHON_PRINTER, "frame poison 10 \n");
-    }
-    if (frame->poison11 != 0xDEADBEEF) {
-        mp_printf(MP_PYTHON_PRINTER, "frame poison 11 \n");
-    }
-
-    char tmp[10];
-    sprintf(tmp, "%08x", CANHACK_MAX_BITS);   
-    mp_printf(MP_PYTHON_PRINTER, "MB: ");
-    mp_printf(MP_PYTHON_PRINTER, tmp);
-    mp_printf(MP_PYTHON_PRINTER, "\n");
-    uint32_t sz = sizeof(frame->tx_bitstream);
-    sprintf(tmp, "%08lx", sz);
-    mp_printf(MP_PYTHON_PRINTER, "SZ: ");
-    mp_printf(MP_PYTHON_PRINTER, tmp);
-    mp_printf(MP_PYTHON_PRINTER, "\n");
-
-}
-
-static void setbeef (canhack_frame_t *frame) 
-{
-    canhack.poison1 = 0xDEADBEEF;
-    canhack.poison2 = 0xDEADBEEF;
-    canhack.poison3 = 0xDEADBEEF;
-    canhack.poison4 = 0xDEADBEEF;
-
-    frame->poison1 = 0xDEADBEEF;
-    frame->poison2 = 0xDEADBEEF;
-    frame->poison3 = 0xDEADBEEF;
-    frame->poison4 = 0xDEADBEEF;
-    frame->poison5 = 0xDEADBEEF;
-    frame->poison6 = 0xDEADBEEF;
-    frame->poison7 = 0xDEADBEEF;
-    frame->poison8 = 0xDEADBEEF;
-    frame->poison9 = 0xDEADBEEF;
-    frame->poison10 = 0xDEADBEEF;
-    frame->poison11 = 0xDEADBEEF;
-}
 
 TIME_CRITICAL void canhack_set_timeout(uint32_t timeout)
 {
@@ -676,10 +588,6 @@ static void add_raw_bit(uint8_t bit, bool stuff, canhack_frame_t *frame)
         frame->stuff_count++;                       // raise stuff count (only needed in fd frames)
     }
     frame->tx_bitstream[frame->tx_bits++] = bit;
-    sprintf(str, "%08lx", frame->tx_bits);
-    mp_printf(MP_PYTHON_PRINTER, str);
-    mp_printf(MP_PYTHON_PRINTER, "\n");
-    checkbeef(frame);
 }
 
 // CRC for normal CAN
@@ -789,7 +697,6 @@ static void add_bit(uint8_t bit, canhack_frame_t *frame, uint32_t dlc, bool fd)
 
 void canhack_set_frame(uint32_t id_a, uint32_t id_b, bool rtr, bool ide, uint32_t dlc, const uint8_t *data, canhack_frame_t *frame, bool fd)
 {
-    setbeef(frame);
     uint8_t len = 0;    // RTR frames have a DLC of any value but no data field
     if (!rtr) {
         if (fd & (dlc > 8)) {
@@ -862,11 +769,6 @@ void canhack_set_frame(uint32_t id_a, uint32_t id_b, bool rtr, bool ide, uint32_
 
     // The last bit of the arbitration field is the RTR bit if a basic frame; this might be overwritten if IDE = 1
     frame->last_arbitration_bit = frame->tx_bits - 1U;
-    mp_printf(MP_PYTHON_PRINTER, "________ \n");
-    sprintf(str, "%08lx", frame->last_arbitration_bit);
-    mp_printf(MP_PYTHON_PRINTER, str);    
-    mp_printf(MP_PYTHON_PRINTER, "\n");
-
 
     // IDE
     if (ide) {
@@ -952,11 +854,6 @@ void canhack_set_frame(uint32_t id_a, uint32_t id_b, bool rtr, bool ide, uint32_
         dlc <<= 1U;
     }
     frame->last_dlc_bit = frame->tx_bits - 1U;
-    mp_printf(MP_PYTHON_PRINTER, "________ \n");
-    sprintf(str, "%08lx", frame->last_dlc_bit);
-    mp_printf(MP_PYTHON_PRINTER, str);    
-    mp_printf(MP_PYTHON_PRINTER, "\n");
-
 
     // Data
     for (uint32_t i = 0; i < len; i ++) {
@@ -974,11 +871,6 @@ void canhack_set_frame(uint32_t id_a, uint32_t id_b, bool rtr, bool ide, uint32_
 
     // If the length is 0 then the last data bit is equal to the last DLC bit
     frame->last_data_bit = frame->tx_bits - 1U;
-    mp_printf(MP_PYTHON_PRINTER, "________ \n");
-    sprintf(str, "%08lx", frame->last_data_bit);
-    mp_printf(MP_PYTHON_PRINTER, str);    
-    mp_printf(MP_PYTHON_PRINTER, "\n");
-
 
     // CRC for CAN
     if (!fd) {
@@ -1084,25 +976,6 @@ void canhack_set_frame(uint32_t id_a, uint32_t id_b, bool rtr, bool ide, uint32_
 
     // Set up the matching masks for this CAN frame
     frame->tx_arbitration_bits = frame->last_arbitration_bit + 1U;
-
-    sprintf(str, "%08lx", frame->last_arbitration_bit);
-    mp_printf(MP_PYTHON_PRINTER, str);    
-    mp_printf(MP_PYTHON_PRINTER, "\n");
-    sprintf(str, "%08lx", frame->last_dlc_bit);
-    mp_printf(MP_PYTHON_PRINTER, str);
-    mp_printf(MP_PYTHON_PRINTER, "\n");
-    sprintf(str, "%08lx", frame->last_data_bit);
-    mp_printf(MP_PYTHON_PRINTER, str);
-    mp_printf(MP_PYTHON_PRINTER, "\n");
-    sprintf(str, "%08lx", frame->last_crc_bit);
-    mp_printf(MP_PYTHON_PRINTER, str);    
-    mp_printf(MP_PYTHON_PRINTER, "\n");
-    sprintf(str, "%08lx", frame->last_eof_bit);
-    mp_printf(MP_PYTHON_PRINTER, str);
-    mp_printf(MP_PYTHON_PRINTER, "\n");
-    sprintf(str, "%08lx", frame->tx_bits);
-    mp_printf(MP_PYTHON_PRINTER, str);
-    mp_printf(MP_PYTHON_PRINTER, "\n");
 
     frame->frame_set = true;
 }

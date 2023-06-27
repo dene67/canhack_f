@@ -86,29 +86,18 @@
 
 /// Structure that defines a CAN frame parameters
 typedef struct {
-    uint32_t poison1;
     uint8_t tx_bitstream[CANHACK_MAX_BITS];     ///< The bitstream of the CAN frame
-    uint32_t poison2;
     bool stuff_bit[CANHACK_MAX_BITS];           ///< Indicates if the corresponding bit is a stuff bit
-    uint32_t poison3;
     uint32_t tx_bits;                           ///< Number of  bits in the frame
-    uint32_t poison4;
     uint32_t tx_arbitration_bits;               ///< Number of bits in arbitartion (including stuff bits); the fields are ID A + RTR (standard) or ID A + SRR + IDE + ID B + RTR (extended)
-    uint32_t poison5;
 
     // Fields set when creating the CAN frame
     uint32_t crc_rg;                            ///< CRC value (15 (normal CAN), 17 (CAN FD =< 16 bytes data) or 21 (CAN FD > 16 bytes data) bit value)
-    uint32_t poison6;
     uint32_t last_arbitration_bit;              ///< Bit index of last arbitration bit (always the RTR bit for both IDE = 0 and IDE = 1); may be a stuff bit
-    uint32_t poison7;
     uint32_t last_dlc_bit;                      ///< Bit index of last bit of DLC field; may be a stuff bit
-    uint32_t poison8;
     uint32_t last_data_bit;                     ///< Bit index of the last bit of the data field; may be a stuff bit
-    uint32_t poison9;
     uint32_t last_crc_bit;                      ///< Bit index of last bit of the CRC field; may be a stuff bit
-    uint32_t poison10;
     uint32_t last_eof_bit;                      ///< Bit index of the last bit of the EOF field; may be a stuff bit
-    uint32_t poison11;
     bool frame_set;                             ///< True when the frame has been set; may be a stuff bit
     bool fd;                                    ///< True when it's a CAN FD frame
 
