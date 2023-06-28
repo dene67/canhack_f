@@ -99,14 +99,7 @@ TIME_CRITICAL bool send_bits(ctr_t bit_end, ctr_t sample_point, struct canhack *
                 // Finished
                 SET_CAN_TX_REC();
                 canhack_p->sent = true;
-                mp_printf(MP_PYTHON_PRINTER, "send time: %u \n", highest_time);
-                mp_printf(MP_PYTHON_PRINTER, "sample time: %u \n", highest_s_time);
                 return false;
-            }
-
-            time = GET_CLOCK() - now;
-            if (REACHED(time, highest_time)) {
-                highest_time = time;
             }
         }
         if (REACHED(now, sample_point)) {
@@ -117,11 +110,6 @@ TIME_CRITICAL bool send_bits(ctr_t bit_end, ctr_t sample_point, struct canhack *
                     return true;
             }
             sample_point = ADVANCE(sample_point, BIT_TIME);
-
-            s_time = GET_CLOCK() - now;
-            if (REACHED(s_time, highest_s_time)) {
-                highest_s_time = s_time;
-            }
         }
         if (canhack.canhack_timeout-- == 0) {
             SET_CAN_TX_REC();
