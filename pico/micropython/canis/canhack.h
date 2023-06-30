@@ -94,6 +94,7 @@ typedef struct {
     // Fields set when creating the CAN frame
     uint32_t crc_rg;                            ///< CRC value (15 (normal CAN), 17 (CAN FD =< 16 bytes data) or 21 (CAN FD > 16 bytes data) bit value)
     uint32_t last_arbitration_bit;              ///< Bit index of last arbitration bit (always the RTR bit for both IDE = 0 and IDE = 1); may be a stuff bit
+    uint32_t brs_bit;                           ///< Bit index of the Bit Rate Switch bit in FD Frames
     uint32_t last_dlc_bit;                      ///< Bit index of last bit of DLC field; may be a stuff bit
     uint32_t last_data_bit;                     ///< Bit index of the last bit of the data field; may be a stuff bit
     uint32_t last_crc_bit;                      ///< Bit index of last bit of the CRC field; may be a stuff bit
@@ -109,6 +110,12 @@ typedef struct {
     bool crcing;                                ///< True if CRCing enabled
 } canhack_frame_t;
 
+typedef struct {
+    ctr_t bit_end;
+    ctr_t sample_point;
+    uint8_t tx_index;
+} send_helper_t;
+
 /// \brief Initialize CANHack toolkit
 void canhack_init(void);
 
@@ -120,7 +127,7 @@ void canhack_init(void);
 /// \param dlc DLC field; data length if a data frame, arbitrary 4-bit value if a remote frame
 /// \param data pointer to up to 8 bytes of payload
 /// \param frame the handle to the frame (see canhack_get_frame)
-void canhack_set_frame(uint32_t id_a, uint32_t id_b, bool rtr, bool ide, uint32_t dlc, const uint8_t *data, canhack_frame_t *frame, bool fd);
+void canhack_set_frame(uint32_t id_a, uint32_t id_b, bool rtr, bool ide, uint32_t dlc, const uint8_t *data, canhack_frame_t *frame, bool fd, bool brs, bool esi);
 
 /// \brief Get handle to frame
 /// \param second true if frame 2 is wanted

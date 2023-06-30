@@ -172,6 +172,8 @@ STATIC mp_obj_t rp2_canhack_set_frame(mp_uint_t n_args, const mp_obj_t *pos_args
             { MP_QSTR_dlc,       MP_ARG_KW_ONLY  | MP_ARG_INT,  {.u_int = 0} },
             { MP_QSTR_second,    MP_ARG_KW_ONLY  | MP_ARG_BOOL,  {.u_bool = false} },
             { MP_QSTR_fd,        MP_ARG_KW_ONLY  | MP_ARG_BOOL,  {.u_bool = false} },
+            { MP_QSTR_brs,       MP_ARG_KW_ONLY  | MP_ARG_BOOL,  {.u_bool = true} },
+            { MP_QSTR_esi,       MP_ARG_KW_ONLY  | MP_ARG_BOOL,  {.u_bool = true} },
     };
 
     // parse args
@@ -187,6 +189,10 @@ STATIC mp_obj_t rp2_canhack_set_frame(mp_uint_t n_args, const mp_obj_t *pos_args
     bool set_dlc = args[4].u_bool;
 
     bool second = args[6].u_bool;
+
+    // only relevant for CAN FD
+    bool brs = args[8].u_bool;
+    bool esi = args[9].u_bool;
 
     uint32_t len;
     uint32_t dlc;
@@ -264,7 +270,7 @@ STATIC mp_obj_t rp2_canhack_set_frame(mp_uint_t n_args, const mp_obj_t *pos_args
     }
 
     canhack_frame_t *frame = canhack_get_frame(second);
-    canhack_set_frame(id_a, id_b, rtr, ide, dlc, data, frame, fd);
+    canhack_set_frame(id_a, id_b, rtr, ide, dlc, data, frame, fd, brs, esi);
 
     return mp_const_none;
 }

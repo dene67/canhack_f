@@ -58,7 +58,6 @@
 #define     SAMPLE_POINT_OFFSET_FD          (39U)       // Sample Offset for high speed mode
 #define     DEFAULT_LOOPBACK_OFFSET         (93U)
 #define     SAMPLE_TO_BIT_END               (BIT_TIME - SAMPLE_POINT_OFFSET)
-#define     SAMPLE_TO_BIT_END_FD            (BIT_TIME_FD - SAMPLE_POINT_OFFSET_FD)
 #define     FALLING_EDGE_RECALIBRATE        (31U)
 
 #define     TIME_CRITICAL                   __attribute__((noinline, long_call, section(".time_critical")))

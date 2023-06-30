@@ -71,15 +71,58 @@ TIME_CRITICAL void canhack_stop(void)
     canhack.canhack_timeout = 0;
 }
 
+TIME_CRITICAL send_helper_t brs_bits(send_helper_t send_helper, struct canhack *canhack_p, canhack_frame_t *frame, uint32_t end_of_brs) 
+{
+    ctr_t now;
+    uint32_t rx;
+    ctr_t bit_end = send_helper.bit_end;
+    ctr_t sample_point = ADVANCE(bit_end, SAMPLE_POINT_OFFSET_FD);
+    uint8_t tx_index = send_helper.tx_index;
+    uint8_t tx = frame->tx_bitstream[tx_index++];
+    uint8_t cur_tx = tx;
+
+    for (;;) {
+        now = GET_CLOCK();
+        // Bit end is scanned first because it needs to execute as close to the time as possible
+        if (REACHED(now, bit_end)) {
+            SET_CAN_TX(tx);
+
+            if ((tx_index >= end_of_brs)) {
+                // Finished
+                send_helper.bit_end = ADVANCE(bit_end, BIT_TIME);
+                send_helper.sample_point = ADVANCE(bit_end, SAMPLE_POINT_OFFSET);
+                send_helper.tx_index = tx_index;
+                return send_helper;
+            }
+ 
+            // The next bit is set up after the time because the critical I/O operation (+switch) has taken place now
+            cur_tx = tx;
+            tx = frame->tx_bitstream[tx_index++];
+                        
+            // Bit end has to be set after potential end of brs
+            bit_end = ADVANCE(bit_end, BIT_TIME_FD);
+        }
+        if (REACHED(now, sample_point)) {
+            rx = GET_CAN_RX();
+            if (rx != cur_tx) {
+                // If arbitration then lost, or an error, then give up and go back to SOF
+                SET_CAN_TX_REC();
+                return send_helper;
+            }
+            sample_point = ADVANCE(sample_point, BIT_TIME_FD);
+        }
+        if (canhack.canhack_timeout-- == 0) {
+            SET_CAN_TX_REC();
+            return send_helper;
+        }
+    }
+}
+
 // Returns true if should re-enter arbitration due to lost arbitration and/or error.
 // Returns false if sent
 TIME_CRITICAL bool send_bits(ctr_t bit_end, ctr_t sample_point, struct canhack *canhack_p, uint8_t tx_index, canhack_frame_t *frame)
 {
     ctr_t now;
-    ctr_t time = 0;
-    ctr_t s_time = 0;
-    ctr_t highest_time = 0;
-    ctr_t highest_s_time = 0;
     uint32_t rx;
     uint8_t tx = frame->tx_bitstream[tx_index++];
     uint8_t cur_tx = tx;
@@ -91,10 +134,27 @@ TIME_CRITICAL bool send_bits(ctr_t bit_end, ctr_t sample_point, struct canhack *
             SET_CAN_TX(tx);
             bit_end = ADVANCE(bit_end, BIT_TIME);
 
+            // If brs is set in an FD frame the send_helper is packed and the fast data mode is started
+            if (frame->fd | (tx_index = frame->brs_bit)) {
+                send_helper_t send_helper;
+                send_helper.bit_end = bit_end;
+                send_helper.tx_index = tx_index;
+
+                send_helper = brs_bits(send_helper, canhack_p, frame, frame->last_crc_bit);
+
+                bit_end = send_helper.bit_end;
+                sample_point = send_helper.sample_point;
+                tx_index = send_helper.tx_index;
+
+                if (tx_index < frame->last_crc_bit) {
+                    return true;
+                }
+            }
+
             // The next bit is set up after the time because the critical I/O operation has taken place now
             cur_tx = tx;
             tx = frame->tx_bitstream[tx_index++];
-
+            
             if ((tx_index >= frame->tx_bits)) {
                 // Finished
                 SET_CAN_TX_REC();
@@ -614,11 +674,11 @@ static void do_crc21(uint8_t bitval, canhack_frame_t *frame)
     }
 }
 
-static void add_bit(uint8_t bit, canhack_frame_t *frame, uint32_t dlc, bool fd)
+static void add_bit(uint8_t bit, canhack_frame_t *frame, uint32_t dlc)
 {
     // Choose crc based on CAN type and dlc
     if (frame->crcing) {
-        if (fd) {
+        if (frame->fd) {
             if (dlc > 10) {
                 do_crc21(bit, frame);
             } 
@@ -646,7 +706,7 @@ static void add_bit(uint8_t bit, canhack_frame_t *frame, uint32_t dlc, bool fd)
         if (frame->dominant_bits >= 5U) {
 
             // stuff bits count into crc in FD frames
-            if (fd) {
+            if (frame->fd) {
                 if (dlc > 10) {
                     do_crc21(1U, frame);
                 } 
@@ -663,7 +723,7 @@ static void add_bit(uint8_t bit, canhack_frame_t *frame, uint32_t dlc, bool fd)
         if (frame->recessive_bits >= 5U) {
 
             // stuff bits count into crc in FD frames
-            if (fd) {
+            if (frame->fd) {
                 if (dlc > 10) {
                     do_crc21(0, frame);
                 } 
@@ -688,7 +748,7 @@ static void add_bit(uint8_t bit, canhack_frame_t *frame, uint32_t dlc, bool fd)
 //
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void canhack_set_frame(uint32_t id_a, uint32_t id_b, bool rtr, bool ide, uint32_t dlc, const uint8_t *data, canhack_frame_t *frame, bool fd)
+void canhack_set_frame(uint32_t id_a, uint32_t id_b, bool rtr, bool ide, uint32_t dlc, const uint8_t *data, canhack_frame_t *frame, bool fd, bool brs, bool esi)
 {
     uint8_t len = 0;    // RTR frames have a DLC of any value but no data field
     if (!rtr) {
@@ -708,26 +768,26 @@ void canhack_set_frame(uint32_t id_a, uint32_t id_b, bool rtr, bool ide, uint32_
         }
     }
 
-    // set crc_len (only needed for fd)
+    // set crc_rg and crc_len (only needed for fd)
     uint32_t crc_len = 17U;
-    if (dlc > 10) {
-        crc_len = 21U;
-    }
-
-    frame->tx_bits = 0;
-
     if (fd) {
+        if (dlc > 10) {
+            crc_len = 21U;
+        }
         frame->crc_rg = 1U << (crc_len - 1U);
     } 
     else {
         frame->crc_rg = 0;
     }
-
+    
+    // init variables
+    frame->tx_bits = 0;
     frame->stuffing = true;
     frame->crcing = true;
     frame->dominant_bits = 0;
     frame->recessive_bits = 0;
     frame->stuff_count = 0;
+    frame->fd = fd;
 
     for (uint32_t i = 0; i < CANHACK_MAX_BITS; i++) {
         frame->tx_bitstream[i] = 0;
@@ -738,26 +798,26 @@ void canhack_set_frame(uint32_t id_a, uint32_t id_b, bool rtr, bool ide, uint32_
     // {SOF, ID A, SRR = 1, IDE = 1, ID B, RTR, r1, r0) [Extended]
 
     // SOF
-    add_bit(0, frame, dlc, fd);
+    add_bit(0, frame, dlc);
 
     // ID A
     id_a <<= 21U;
     for (uint32_t i = 0; i < 11U; i++) {
         if (id_a & 0x80000000U) {
-            add_bit(1U, frame, dlc, fd);
+            add_bit(1U, frame, dlc);
         }
         else {
-            add_bit(0, frame, dlc, fd);
+            add_bit(0, frame, dlc);
         }
         id_a <<= 1U;
     }
 
     // RTR/SRR (RRS for non extended FD)
     if (rtr || ide) {
-        add_bit(1U, frame, dlc, fd); // SRR
+        add_bit(1U, frame, dlc); // SRR
     }
     else {
-        add_bit(0, frame, dlc, fd); // RTR or RRS
+        add_bit(0, frame, dlc); // RTR or RRS
     }
 
     // The last bit of the arbitration field is the RTR bit if a basic frame; this might be overwritten if IDE = 1
@@ -765,10 +825,10 @@ void canhack_set_frame(uint32_t id_a, uint32_t id_b, bool rtr, bool ide, uint32_
 
     // IDE
     if (ide) {
-        add_bit(1U, frame, dlc, fd);
+        add_bit(1U, frame, dlc);
     }
     else {
-        add_bit(0, frame, dlc, fd);
+        add_bit(0, frame, dlc);
     }
 
     if (ide) {
@@ -776,29 +836,29 @@ void canhack_set_frame(uint32_t id_a, uint32_t id_b, bool rtr, bool ide, uint32_
         id_b <<= 14U;
         for (uint32_t i = 0; i < 18U; i++) {
             if (id_b & 0x80000000U) {
-                add_bit(1U, frame, dlc, fd);
+                add_bit(1U, frame, dlc);
             } 
             else {
-                add_bit(0, frame, dlc, fd);
+                add_bit(0, frame, dlc);
             }
             id_b <<= 1U;
         }
         // RTR (RRS for fd)
         if (rtr) {
-            add_bit(1U, frame, dlc, fd);
+            add_bit(1U, frame, dlc);
         }
         else {
-            add_bit(0, frame, dlc, fd);
+            add_bit(0, frame, dlc);
         }
         // The RTR bit is the last bit in the arbitration field if an extended frame
         frame->last_arbitration_bit = frame->tx_bits - 1U;
 
         // r1 (FDF in extended FD frames)
         if (fd) {
-            add_bit(1U, frame, dlc, fd);
+            add_bit(1U, frame, dlc);
         } 
         else {
-            add_bit(0, frame, dlc, fd);
+            add_bit(0, frame, dlc);
         }
     }
     else {
@@ -807,31 +867,31 @@ void canhack_set_frame(uint32_t id_a, uint32_t id_b, bool rtr, bool ide, uint32_
 
     // FDF for non extended FD frames
     if (fd & !ide) {
-        add_bit(1U, frame, dlc, fd);
+        add_bit(1U, frame, dlc);
     }
 
     // r0 (res in FD frames)
-    add_bit(0, frame, dlc, fd);
+    add_bit(0, frame, dlc);
 
     // Additional bits for FD
     if (fd) {
 
         // BRS bit rate switch
-        bool brs = true; // TODO: make optional
         if (brs) {
-            add_bit(1U, frame, dlc, fd);
+            add_bit(1U, frame, dlc);
         } 
         else {
-            add_bit(0, frame, dlc, fd);
+            add_bit(0, frame, dlc);
         }
 
-        // ESI
-        bool error_active = true; // TODO: make optional
-        if (error_active) {
-            add_bit(0, frame, dlc, fd);
+        frame->brs_bit = frame->tx_bits - 1U;
+
+        // ESI (error active)
+        if (esi) {
+            add_bit(0, frame, dlc);
         } 
         else {
-            add_bit(1, frame, dlc, fd);
+            add_bit(1U, frame, dlc);
         }
     }
 
@@ -839,10 +899,10 @@ void canhack_set_frame(uint32_t id_a, uint32_t id_b, bool rtr, bool ide, uint32_
     dlc <<= 28U;
     for (uint32_t i = 0; i < 4U; i++) {
         if (dlc & 0x80000000U) {
-            add_bit(1U, frame, dlc, fd);
+            add_bit(1U, frame, dlc);
         } 
         else {
-            add_bit(0, frame, dlc, fd);
+            add_bit(0, frame, dlc);
         }
         dlc <<= 1U;
     }
@@ -853,10 +913,10 @@ void canhack_set_frame(uint32_t id_a, uint32_t id_b, bool rtr, bool ide, uint32_
         uint8_t byte = data[i];
         for (uint32_t j = 0; j < 8; j++) {
             if (byte & 0x80U) {
-                add_bit(1U, frame, dlc, fd);
+                add_bit(1U, frame, dlc);
             } 
             else {
-                add_bit(0, frame, dlc, fd);
+                add_bit(0, frame, dlc);
             }
             byte <<= 1U;
         }
@@ -871,10 +931,10 @@ void canhack_set_frame(uint32_t id_a, uint32_t id_b, bool rtr, bool ide, uint32_
         uint32_t crc_rg = frame->crc_rg << 17U;
         for (uint32_t i = 0; i < 15; i++) {
             if (crc_rg & 0x80000000U) {
-                add_bit(1U, frame, dlc, fd);
+                add_bit(1U, frame, dlc);
             } 
             else {
-                add_bit(0, frame, dlc, fd);
+                add_bit(0, frame, dlc);
             }
         crc_rg <<= 1U;
         }    
@@ -883,7 +943,7 @@ void canhack_set_frame(uint32_t id_a, uint32_t id_b, bool rtr, bool ide, uint32_
     else {
         frame->stuffing = false;
         uint8_t stc = frame->stuff_count % 8;
-        uint8_t parity = frame->stuff_count % 2;
+        uint8_t parity = frame->stuff_count & 0x1U;
 
         // First FSB
         if (!frame->stuff_bit[frame->last_data_bit]) {
@@ -898,17 +958,17 @@ void canhack_set_frame(uint32_t id_a, uint32_t id_b, bool rtr, bool ide, uint32_
         // Stuff Count and Parity
         for (uint32_t i = 0; i < 3; i++) {
             if (stc & 0x4U) {
-                add_bit(1U, frame, dlc, fd);
+                add_bit(1U, frame, dlc);
             } 
             else {
-                add_bit(0, frame, dlc, fd);
+                add_bit(0, frame, dlc);
             }
             stc <<= 1U;
         }
-        add_bit(parity & 0x1U, frame, dlc, fd);
+        add_bit(parity, frame, dlc);
 
         // Second FSB
-        if (parity & 0x1U) {
+        if (parity) {
             add_raw_bit(0, true, frame);
         } 
         else {
@@ -922,13 +982,13 @@ void canhack_set_frame(uint32_t id_a, uint32_t id_b, bool rtr, bool ide, uint32_
         uint32_t crc_rg = frame->crc_rg << (32U - crc_len);
         for (uint32_t i = 0; i < crc_len; i++) {
             if (crc_rg & 0x80000000U) {
-                add_bit(1U, frame, dlc, fd);
+                add_bit(1U, frame, dlc);
                 if ((i+1)%4 == 0) {
                     add_raw_bit(0, true, frame);
                 }
             }
             else {
-                add_bit(0, frame, dlc, fd);
+                add_bit(0, frame, dlc);
                 if ((i+1)%4 == 0) {
                     add_raw_bit(1U, true, frame);
                 }
@@ -942,30 +1002,30 @@ void canhack_set_frame(uint32_t id_a, uint32_t id_b, bool rtr, bool ide, uint32_
     frame->stuffing = false;
 
     // CRC delimiter
-    add_bit(1U, frame, dlc, fd);
+    add_bit(1U, frame, dlc);
 
     // ACK; we transmit this as a dominant bit to ensure the state machines lock on to the right
     // EOF field; it's mostly moot since if there are no CAN controllers then there is not much
     // hacking to do.
-    add_bit(0, frame, dlc, fd);
+    add_bit(0, frame, dlc);
 
     // ACK delimiter
-    add_bit(1U, frame, dlc, fd);
+    add_bit(1U, frame, dlc);
 
     // EOF
-    add_bit(1U, frame, dlc, fd);
-    add_bit(1U, frame, dlc, fd);
-    add_bit(1U, frame, dlc, fd);
-    add_bit(1U, frame, dlc, fd);
-    add_bit(1U, frame, dlc, fd);
-    add_bit(1U, frame, dlc, fd);
-    add_bit(1U, frame, dlc, fd);
+    add_bit(1U, frame, dlc);
+    add_bit(1U, frame, dlc);
+    add_bit(1U, frame, dlc);
+    add_bit(1U, frame, dlc);
+    add_bit(1U, frame, dlc);
+    add_bit(1U, frame, dlc);
+    add_bit(1U, frame, dlc);
     frame->last_eof_bit = frame->tx_bits - 1U;
 
     // IFS
-    add_bit(1U, frame, dlc, fd);
-    add_bit(1U, frame, dlc, fd);
-    add_bit(1U, frame, dlc, fd);
+    add_bit(1U, frame, dlc);
+    add_bit(1U, frame, dlc);
+    add_bit(1U, frame, dlc);
 
     // Set up the matching masks for this CAN frame
     frame->tx_arbitration_bits = frame->last_arbitration_bit + 1U;
