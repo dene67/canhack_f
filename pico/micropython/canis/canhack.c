@@ -135,7 +135,7 @@ TIME_CRITICAL bool send_bits(ctr_t bit_end, ctr_t sample_point, struct canhack *
             bit_end = ADVANCE(bit_end, BIT_TIME);
 
             // If brs is set in an FD frame the send_helper is packed and the fast data mode is started
-            if (frame->fd | (tx_index = frame->brs_bit)) {
+            if (frame->fd && (tx_index = frame->brs_bit - 1)) {
                 send_helper_t send_helper;
                 send_helper.bit_end = bit_end;
                 send_helper.tx_index = tx_index;
