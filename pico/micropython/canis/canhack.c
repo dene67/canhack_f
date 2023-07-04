@@ -71,53 +71,6 @@ TIME_CRITICAL void canhack_stop(void)
     canhack.canhack_timeout = 0;
 }
 
-TIME_CRITICAL send_helper_t brs_bits(send_helper_t send_helper, struct canhack *canhack_p, canhack_frame_t *frame, uint32_t end_of_brs) 
-{
-    ctr_t now;
-    uint32_t rx;
-    ctr_t bit_end = send_helper.bit_end;
-    ctr_t sample_point = ADVANCE(bit_end, SAMPLE_POINT_OFFSET_FD);
-    uint8_t tx_index = send_helper.tx_index;
-    uint8_t tx = frame->tx_bitstream[tx_index++];
-    uint8_t cur_tx = tx;
-
-    for (;;) {
-        now = GET_CLOCK();
-        // Bit end is scanned first because it needs to execute as close to the time as possible
-        if (REACHED(now, bit_end)) {
-            SET_CAN_TX(tx);
-
-            if ((tx_index >= end_of_brs)) {
-                // Finished
-                send_helper.bit_end = ADVANCE(bit_end, BIT_TIME);
-                send_helper.sample_point = ADVANCE(bit_end, SAMPLE_POINT_OFFSET);
-                send_helper.tx_index = tx_index;
-                return send_helper;
-            }
- 
-            // The next bit is set up after the time because the critical I/O operation (+switch) has taken place now
-            cur_tx = tx;
-            tx = frame->tx_bitstream[tx_index++];
-                        
-            // Bit end has to be set after potential end of brs
-            bit_end = ADVANCE(bit_end, BIT_TIME_FD);
-        }
-        if (REACHED(now, sample_point)) {
-            rx = GET_CAN_RX();
-            if (rx != cur_tx) {
-                // If arbitration then lost, or an error, then give up and go back to SOF
-                SET_CAN_TX_REC();
-                return send_helper;
-            }
-            sample_point = ADVANCE(sample_point, BIT_TIME_FD);
-        }
-        if (canhack.canhack_timeout-- == 0) {
-            SET_CAN_TX_REC();
-            return send_helper;
-        }
-    }
-}
-
 // Returns true if should re-enter arbitration due to lost arbitration and/or error.
 // Returns false if sent
 TIME_CRITICAL bool send_bits(ctr_t bit_end, ctr_t sample_point, struct canhack *canhack_p, uint8_t tx_index, canhack_frame_t *frame)
@@ -126,29 +79,22 @@ TIME_CRITICAL bool send_bits(ctr_t bit_end, ctr_t sample_point, struct canhack *
     uint32_t rx;
     uint8_t tx = frame->tx_bitstream[tx_index++];
     uint8_t cur_tx = tx;
+    uint32_t cur_bit_time = BIT_TIME;
 
     for (;;) {
         now = GET_CLOCK();
         // Bit end is scanned first because it needs to execute as close to the time as possible
         if (REACHED(now, bit_end)) {
             SET_CAN_TX(tx);
-            bit_end = ADVANCE(bit_end, BIT_TIME);
+            bit_end = ADVANCE(bit_end, cur_bit_time);
 
             // If brs is set in an FD frame the send_helper is packed and the fast data mode is started
-            if (frame->fd && (tx_index = frame->brs_bit - 1)) {
-                send_helper_t send_helper;
-                send_helper.bit_end = bit_end;
-                send_helper.tx_index = tx_index;
-
-                send_helper = brs_bits(send_helper, canhack_p, frame, frame->last_crc_bit);
-
-                bit_end = send_helper.bit_end;
-                sample_point = send_helper.sample_point;
-                tx_index = send_helper.tx_index;
-
-                if (tx_index < frame->last_crc_bit) {
-                    return true;
-                }
+            if ((tx_index == frame->brs_bit) & tx) {
+                cur_bit_time = BIT_TIME_FD;
+            } 
+            
+            if (tx_index == frame->last_crc_bit) {
+                cur_bit_time = BIT_TIME;
             }
 
             // The next bit is set up after the time because the critical I/O operation has taken place now
@@ -169,7 +115,7 @@ TIME_CRITICAL bool send_bits(ctr_t bit_end, ctr_t sample_point, struct canhack *
                     SET_CAN_TX_REC();
                     return true;
             }
-            sample_point = ADVANCE(sample_point, BIT_TIME);
+            sample_point = ADVANCE(sample_point, cur_bit_time);
         }
         if (canhack.canhack_timeout-- == 0) {
             SET_CAN_TX_REC();
@@ -814,7 +760,7 @@ void canhack_set_frame(uint32_t id_a, uint32_t id_b, bool rtr, bool ide, uint32_
 
     // RTR/SRR (RRS for non extended FD)
     if (rtr || ide) {
-        add_bit(1U, frame, dlc); // SRR
+        add_bit(1U, frame, dlc); // RTR (if set) or SRR
     }
     else {
         add_bit(0, frame, dlc); // RTR or RRS

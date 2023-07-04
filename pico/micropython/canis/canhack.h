@@ -110,12 +110,6 @@ typedef struct {
     bool crcing;                                ///< True if CRCing enabled
 } canhack_frame_t;
 
-typedef struct {
-    ctr_t bit_end;
-    ctr_t sample_point;
-    uint8_t tx_index;
-} send_helper_t;
-
 /// \brief Initialize CANHack toolkit
 void canhack_init(void);
 
