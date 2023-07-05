@@ -101,6 +101,7 @@ typedef struct {
     uint32_t last_eof_bit;                      ///< Bit index of the last bit of the EOF field; may be a stuff bit
     bool frame_set;                             ///< True when the frame has been set; may be a stuff bit
     bool fd;                                    ///< True when it's a CAN FD frame
+    bool brs;
 
     // Fields used during creation of the CAN frame
     uint32_t dominant_bits;                     ///< Dominant bits in a row
