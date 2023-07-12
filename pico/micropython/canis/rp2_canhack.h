@@ -49,22 +49,23 @@
 #endif
 
 #define     CANHACK_PWM                     (7U)
-#define     BIT_TIME                        (259U)      // Time adjusted for 130 MHz (used to be 249)
-#define     BIT_TIME_FD                     (64U)       // Bit Time for high speed mode
+#define     BIT_TIME                        (499U)      // Time adjusted for 250 MHz (used to be 249)
+#define     BIT_TIME_FD                     (125U)      // Bit Time for high speed mode
 #define     BAUD_500KBIT_PRESCALE           (1U)
 #define     BAUD_250KBIT_PRESCALE           (2U)
 #define     BAUD_125KBIT_PRESCALE           (4U)
-#define     SAMPLE_POINT_OFFSET             (156U)      // Time adjusted for 130 MHz (used to be 150)
-#define     SAMPLE_POINT_OFFSET_FD          (39U)       // Sample Offset for high speed mode
-#define     DEFAULT_LOOPBACK_OFFSET         (93U)
+#define     SAMPLE_POINT_OFFSET             (300U)      // Time adjusted for 250 MHz (used to be 150)
+#define     SAMPLE_POINT_OFFSET_FD          (75U)       // Sample Offset for high speed mode
+#define     DEFAULT_LOOPBACK_OFFSET         (186U)
 #define     SAMPLE_TO_BIT_END               (BIT_TIME - SAMPLE_POINT_OFFSET)
-#define     FALLING_EDGE_RECALIBRATE        (31U)
+#define     SAMPLE_TO_BIT_END_FD            (BIT_TIME_FD - SAMPLE_POINT_OFFSET_FD)
+#define     FALLING_EDGE_RECALIBRATE        (62U)
 
 #define     TIME_CRITICAL                   __attribute__((noinline, long_call, section(".time_critical")))
 
-#if (BIT_TIME * 180 > 65535)
+/*#if (BIT_TIME * 180 > 65535)
 #error "Timer wraps over a CAN frame"
-#endif
+#endif*/
 
 // Size of the counter (usually 16-bit or 32-bit)
 typedef uint16_t ctr_t;

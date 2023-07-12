@@ -98,7 +98,7 @@ typedef struct {
     uint32_t last_dlc_bit;                      ///< Bit index of last bit of DLC field; may be a stuff bit
     uint32_t last_data_bit;                     ///< Bit index of the last bit of the data field; may be a stuff bit
     uint32_t last_crc_bit;                      ///< Bit index of last bit of the CRC field; may be a stuff bit
-    uint32_t last_eof_bit;                      ///< Bit index of the last bit of the EOF field; may be a stuff bit
+    uint32_t last_eof_bit;                      ///< Bit index of the last bit of the EOF field
     bool frame_set;                             ///< True when the frame has been set; may be a stuff bit
     bool fd;                                    ///< True when it's a CAN FD frame
 

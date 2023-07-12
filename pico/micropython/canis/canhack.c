@@ -34,8 +34,6 @@
 
 struct canhack;
 
-char str[10];
-
 // This is the CAN frame bit pattern that will be transmitted after observing 11 idle bits
 struct canhack {
 
@@ -73,7 +71,7 @@ TIME_CRITICAL void canhack_stop(void)
 
 // Returns true if should re-enter arbitration due to lost arbitration and/or error.
 // Returns false if sent
-TIME_CRITICAL bool send_bits(ctr_t bit_end, ctr_t sample_point, struct canhack *canhack_p, uint8_t tx_index, canhack_frame_t *frame)
+TIME_CRITICAL bool send_bits(ctr_t bit_end, ctr_t sample_point, struct canhack *canhack_p, uint16_t tx_index, canhack_frame_t *frame)
 {
     ctr_t now;
     uint32_t rx;
@@ -89,19 +87,25 @@ TIME_CRITICAL bool send_bits(ctr_t bit_end, ctr_t sample_point, struct canhack *
             bit_end = ADVANCE(bit_end, cur_bit_time);
 
             // If brs is set in an FD frame the send_helper is packed and the fast data mode is started
-            if ((tx_index == frame->brs_bit) & tx) {
-                cur_bit_time = BIT_TIME_FD;
-            } 
+            if (frame->fd) {
+                if ((tx_index == frame->brs_bit + 1) & tx) {
+                    cur_bit_time = BIT_TIME_FD;
+                    bit_end = bit_end - SAMPLE_TO_BIT_END_FD;
+                    sample_point = bit_end - SAMPLE_TO_BIT_END_FD;
+                } 
             
-            if (tx_index == frame->last_crc_bit) {
-                cur_bit_time = BIT_TIME;
+                if (tx_index == frame->last_crc_bit + 3) {
+                    cur_bit_time = BIT_TIME;
+                    bit_end = ADVANCE(bit_end - BIT_TIME_FD, BIT_TIME);
+                    sample_point = bit_end - SAMPLE_TO_BIT_END;
+                }
             }
 
             // The next bit is set up after the time because the critical I/O operation has taken place now
             cur_tx = tx;
             tx = frame->tx_bitstream[tx_index++];
             
-            if ((tx_index >= frame->tx_bits)) {
+            if (tx_index >= (frame->last_eof_bit + 3)) {
                 // Finished
                 SET_CAN_TX_REC();
                 canhack_p->sent = true;
@@ -259,7 +263,7 @@ TIME_CRITICAL bool canhack_send_frame(uint32_t retries, bool second)
     struct canhack *canhack_p = &canhack;
     canhack_frame_t *can_frame = second ? &canhack_p->can_frame2 : &canhack_p->can_frame1;
     uint32_t bitstream = 0;
-    uint8_t tx_index;
+    uint16_t tx_index;
 
     // Look for 11 recessive bits or 10 recessive bits and a dominant
     uint8_t rx;
@@ -887,8 +891,36 @@ void canhack_set_frame(uint32_t id_a, uint32_t id_b, bool rtr, bool ide, uint32_
     } 
     // CRC and STC for FD
     else {
+
         frame->stuffing = false;
         uint8_t stc = frame->stuff_count % 8;
+        uint8_t gc_stc;                         // set up gray-coded stuff count
+        switch(stc) {
+            case 1:
+                gc_stc = 0b00000001;
+                break;
+            case 2:
+                gc_stc = 0b00000011;
+                break;
+            case 3:
+                gc_stc = 0b00000010;
+                break;
+            case 4:
+                gc_stc = 0b00000110;
+                break;
+            case 5:
+                gc_stc = 0b00000111;
+                break;
+            case 6:
+                gc_stc = 0b00000101;
+                break;
+            case 7:
+                gc_stc = 0b00000100;
+                break;
+            default:
+                gc_stc = 0b00000000;
+                break;
+        }
         uint8_t parity = frame->stuff_count & 0x1U;
 
         // First FSB
@@ -903,7 +935,7 @@ void canhack_set_frame(uint32_t id_a, uint32_t id_b, bool rtr, bool ide, uint32_
 
         // Stuff Count and Parity
         for (uint32_t i = 0; i < 3; i++) {
-            if (stc & 0x4U) {
+            if (gc_stc & 0x4U) {
                 add_bit(1U, frame, dlc);
             } 
             else {
