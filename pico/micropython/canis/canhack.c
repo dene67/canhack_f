@@ -77,6 +77,7 @@ TIME_CRITICAL bool send_bits(ctr_t bit_end, ctr_t sample_point, struct canhack *
     uint32_t rx;
     uint8_t tx = frame->tx_bitstream[tx_index++];
     uint8_t cur_tx = tx;
+    uint16_t cur_bit_time = BIT_TIME;
 
     for (;;) {
         now = GET_CLOCK();
