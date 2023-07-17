@@ -85,7 +85,7 @@ TIME_CRITICAL bool send_bits(ctr_t bit_end, ctr_t sample_point, struct canhack *
         // Bit end is scanned first because it needs to execute as close to the time as possible
         if (REACHED(now, bit_end)) {
             SET_CAN_TX(tx);
-            bit_end = ADVANCE(bit_end, BIT_TIME);
+            bit_end = ADVANCE(bit_end, cur_bit_time);
 
             // If brs is set in an FD frame the send_helper is packed and the fast data mode is started
             if (frame->fd) {
@@ -118,10 +118,10 @@ TIME_CRITICAL bool send_bits(ctr_t bit_end, ctr_t sample_point, struct canhack *
             rx = GET_CAN_RX();
             if (rx != cur_tx) {
                     // If arbitration then lost, or an error, then give up and go back to SOF
-                    SET_CAN_TX_REC();
+                    SET_CAN_TX_REC()
                     return true;
             }
-            sample_point = ADVANCE(sample_point, BIT_TIME);
+            sample_point = ADVANCE(sample_point, cur_bit_time);
         }
 
         if (canhack.canhack_timeout-- == 0) {
