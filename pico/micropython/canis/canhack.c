@@ -87,7 +87,7 @@ TIME_CRITICAL bool send_bits(ctr_t bit_end, ctr_t sample_point, struct canhack *
             SET_CAN_TX(tx);
             bit_end = ADVANCE(bit_end, cur_bit_time);
 
-            // If brs is set in an FD frame the send_helper is packed and the fast data mode is started
+            // Fast data switch on and off
             if (frame->fd) {
                 if ((tx_index == frame->brs_bit + 1) & tx) {
                     cur_bit_time = BIT_TIME_FD;
@@ -95,9 +95,9 @@ TIME_CRITICAL bool send_bits(ctr_t bit_end, ctr_t sample_point, struct canhack *
                     sample_point = bit_end - SAMPLE_TO_BIT_END_FD;
                 } 
             
-                if (tx_index == frame->last_crc_bit + 3) {
+                if (tx_index == frame->last_crc_bit + 2) {
                     cur_bit_time = BIT_TIME;
-                    bit_end = ADVANCE(bit_end - BIT_TIME_FD, BIT_TIME);
+                    bit_end = ADVANCE(bit_end- SAMPLE_TO_BIT_END_FD, SAMPLE_TO_BIT_END);
                     sample_point = bit_end - SAMPLE_TO_BIT_END;
                 }
             }
@@ -611,7 +611,7 @@ static void do_crc17(uint8_t bitval, canhack_frame_t *frame)
     frame->crc_rg <<= 1U;
     frame->crc_rg &= 0x1ffffU;
     if (crc_nxt) {
-        frame->crc_rg ^= 0x1685bU;
+        frame->crc_rg ^= 0x3685bU;
     }
 }
 
@@ -623,7 +623,7 @@ static void do_crc21(uint8_t bitval, canhack_frame_t *frame)
     frame->crc_rg <<= 1U;
     frame->crc_rg &= 0x1fffffU;
     if (crc_nxt) {
-        frame->crc_rg ^= 0x102899U;
+        frame->crc_rg ^= 0x302899U;
     }
 }
 
@@ -850,15 +850,15 @@ void canhack_set_frame(uint32_t id_a, uint32_t id_b, bool rtr, bool ide, uint32_
     }
 
     // DLC
-    dlc <<= 28U;
+    uint32_t dlc_put = dlc << 28U;
     for (uint32_t i = 0; i < 4U; i++) {
-        if (dlc & 0x80000000U) {
+        if (dlc_put & 0x80000000U) {
             add_bit(1U, frame, dlc);
         } 
         else {
             add_bit(0, frame, dlc);
         }
-        dlc <<= 1U;
+        dlc_put <<= 1U;
     }
     frame->last_dlc_bit = frame->tx_bits - 1U;
 
@@ -945,7 +945,7 @@ void canhack_set_frame(uint32_t id_a, uint32_t id_b, bool rtr, bool ide, uint32_
             else {
                 add_bit(0, frame, dlc);
             }
-            stc <<= 1U;
+            gc_stc <<= 1U;
         }
         add_bit(parity, frame, dlc);
 

@@ -49,7 +49,7 @@
 #endif
 
 #define     CANHACK_PWM                     (7U)
-#define     BIT_TIME                        (499U)      // Time adjusted for 130 MHz (used to be 249)
+#define     BIT_TIME                        (499U)      // Time adjusted for 250 MHz (used to be 249)
 #define     BIT_TIME_FD                     (125U)       // Bit Time for high speed mode
 #define     BAUD_500KBIT_PRESCALE           (1U)
 #define     BAUD_250KBIT_PRESCALE           (2U)
