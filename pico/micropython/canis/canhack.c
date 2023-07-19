@@ -866,6 +866,14 @@ void canhack_set_frame(uint32_t id_a, uint32_t id_b, bool rtr, bool ide, uint32_
     for (uint32_t i = 0; i < len; i ++) {
         uint8_t byte = data[i];
         for (uint32_t j = 0; j < 8; j++) {
+
+            // if the last data bit is a stuff bit, it will be replaced by the first fsb
+            if (fd) {
+                if ((i == len-1) & (j == 7)) {
+                    frame->stuffing = false;
+                }
+            }
+
             if (byte & 0x80U) {
                 add_bit(1U, frame, dlc);
             } 
@@ -896,7 +904,6 @@ void canhack_set_frame(uint32_t id_a, uint32_t id_b, bool rtr, bool ide, uint32_
     // CRC and STC for FD
     else {
 
-        frame->stuffing = false;
         uint8_t stc = frame->stuff_count % 8;
         uint8_t gc_stc;                         // set up gray-coded stuff count
         switch(stc) {
@@ -928,13 +935,11 @@ void canhack_set_frame(uint32_t id_a, uint32_t id_b, bool rtr, bool ide, uint32_
         uint8_t parity = frame->stuff_count & 0x1U;
 
         // First FSB
-        if (!frame->stuff_bit[frame->last_data_bit]) {
-            if (frame->tx_bitstream[frame->last_data_bit]) {
-                add_raw_bit(0, true, frame);
-            } 
-            else {
-                add_raw_bit(1U, true, frame);
-            }
+        if (frame->tx_bitstream[frame->last_data_bit]) {
+            add_raw_bit(0, true, frame);
+        } 
+        else {
+            add_raw_bit(1U, true, frame);
         }
 
         // Stuff Count and Parity

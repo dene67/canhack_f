@@ -249,7 +249,7 @@ STATIC mp_obj_t rp2_canhack_set_frame(mp_uint_t n_args, const mp_obj_t *pos_args
                 dlc = 13;
             } 
             else {
-                dlc = (len+3) / 16 + 11U;
+                dlc = (len+15) / 16 + 11U;
             }
         } else {
             dlc = len;
