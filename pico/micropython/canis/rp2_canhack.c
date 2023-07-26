@@ -448,8 +448,10 @@ STATIC MP_DEFINE_CONST_FUN_OBJ_KW(rp2_canhack_send_frame_obj, 1, rp2_canhack_sen
 STATIC mp_obj_t rp2_canhack_send_janus_frame(mp_uint_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_args)
 {
     static const mp_arg_t allowed_args[] = {
-            { MP_QSTR_sync_time,         MP_ARG_KW_ONLY  | MP_ARG_INT,  {.u_int = 50} },
-            { MP_QSTR_split_time,        MP_ARG_KW_ONLY  | MP_ARG_INT,  {.u_int = 155} },
+            { MP_QSTR_sync_time,         MP_ARG_KW_ONLY  | MP_ARG_INT,  {.u_int = 124} },
+            { MP_QSTR_split_time,        MP_ARG_KW_ONLY  | MP_ARG_INT,  {.u_int = 311} },
+            { MP_QSTR_sync_time_fd,      MP_ARG_KW_ONLY  | MP_ARG_INT,  {.u_int = 31} },
+            { MP_QSTR_split_time_fd,     MP_ARG_KW_ONLY  | MP_ARG_INT,  {.u_int = 78} },
             { MP_QSTR_timeout,           MP_ARG_KW_ONLY  | MP_ARG_INT,  {.u_int = 50000000U} },
             { MP_QSTR_retries,           MP_ARG_KW_ONLY  | MP_ARG_INT,  {.u_int = 0} },
     };
@@ -460,8 +462,10 @@ STATIC mp_obj_t rp2_canhack_send_janus_frame(mp_uint_t n_args, const mp_obj_t *p
     // Default to fractions of a bit time: 0-25% = sync time, 6.5%-62.5% = first bit, 62.5%-100% = second bit.
     uint32_t sync_time = args[0].u_int ? args[0].u_int : BIT_TIME / 4U;
     uint32_t split_time = args[1].u_int ? args[1].u_int : (BIT_TIME * 5U) / 8U;
-    uint32_t timeout = args[2].u_int;
-    uint32_t retries = args[3].u_int;
+    uint32_t sync_time_fd = args[2].u_int ? args[2].u_int : BIT_TIME_FD / 4U;
+    uint32_t split_time_fd = args[3].u_int ? args[3].u_int : (BIT_TIME_FD * 5U) / 8U;
+    uint32_t timeout = args[4].u_int;
+    uint32_t retries = args[5].u_int;
 
     canhack_frame_t *frame1 = canhack_get_frame(false);
     canhack_frame_t *frame2 = canhack_get_frame(true);
@@ -471,12 +475,18 @@ STATIC mp_obj_t rp2_canhack_send_janus_frame(mp_uint_t n_args, const mp_obj_t *p
     if (!frame2->frame_set) {
         nlr_raise(mp_obj_new_exception_msg_varg(&mp_type_ValueError, "Second CAN frame has not been set"));
     }
+    if (frame1->brs != frame2->brs) {
+        nlr_raise(mp_obj_new_exception_msg_varg(&mp_type_ValueError, "Varying Bit Rate Switching Options"));
+    }
+    if (frame1->brs & (frame1->brs_bit != frame2->brs_bit)) {
+        nlr_raise(mp_obj_new_exception_msg_varg(&mp_type_ValueError, "BRS Bit needs to be at the same position"));
+    }
 
     // Disable interrupts around the library call because any interrupts will mess up the timing
     disable_irq();
     // Transmit the frame with a timeout (default: 65K bit times, or about 130ms at 500kbit/sec)
     canhack_set_timeout(timeout);
-    canhack_send_janus_frame(sync_time, split_time, retries);
+    canhack_send_janus_frame(sync_time, split_time, sync_time_fd, split_time_fd, retries);
     enable_irq();
 
     return mp_const_none;
@@ -490,6 +500,8 @@ STATIC mp_obj_t rp2_canhack_spoof_frame(mp_uint_t n_args, const mp_obj_t *pos_ar
             { MP_QSTR_overwrite,         MP_ARG_KW_ONLY  | MP_ARG_BOOL,  {.u_bool = false} },
             { MP_QSTR_sync_time,         MP_ARG_KW_ONLY  | MP_ARG_INT,  {.u_int = 0} },
             { MP_QSTR_split_time,        MP_ARG_KW_ONLY  | MP_ARG_INT,  {.u_int = 0} },
+            { MP_QSTR_sync_time_fd,      MP_ARG_KW_ONLY  | MP_ARG_INT,  {.u_int = 0} },
+            { MP_QSTR_split_time_fd,     MP_ARG_KW_ONLY  | MP_ARG_INT,  {.u_int = 0} },
             { MP_QSTR_second,            MP_ARG_KW_ONLY  | MP_ARG_BOOL,  {.u_bool = false} },
             { MP_QSTR_retries,           MP_ARG_KW_ONLY  | MP_ARG_INT,  {.u_int = 0} },
             { MP_QSTR_loopback_offset,   MP_ARG_KW_ONLY  | MP_ARG_INT,  {.u_int = DEFAULT_LOOPBACK_OFFSET} },
@@ -502,9 +514,11 @@ STATIC mp_obj_t rp2_canhack_spoof_frame(mp_uint_t n_args, const mp_obj_t *pos_ar
     bool overwrite = args[1].u_bool;
     uint32_t sync_time = args[2].u_int ? args[2].u_int : BIT_TIME / 4U;
     uint32_t split_time = args[3].u_int ? args[3].u_int : (BIT_TIME * 5U) / 8U;
-    bool second = args[4].u_bool;
-    uint32_t retries = args[5].u_int;
-    uint32_t loopback_offset = args[6].u_int;
+    uint32_t sync_time_fd = args[4].u_int ? args[2].u_int : BIT_TIME_FD / 4U;
+    uint32_t split_time_fd = args[5].u_int ? args[3].u_int : (BIT_TIME_FD * 5U) / 8U;
+    bool second = args[6].u_bool;
+    uint32_t retries = args[7].u_int;
+    uint32_t loopback_offset = args[8].u_int;
 
     canhack_frame_t *frame = canhack_get_frame(false);
     if (!frame->frame_set) {
@@ -539,7 +553,7 @@ STATIC mp_obj_t rp2_canhack_spoof_frame(mp_uint_t n_args, const mp_obj_t *pos_ar
         disable_irq();
         // Transmit a frame after detecting the target frame
         canhack_set_timeout(timeout);
-        canhack_spoof_frame(second, sync_time, split_time, retries);
+        canhack_spoof_frame(second, sync_time, split_time, sync_time_fd, split_time_fd, retries);
         enable_irq();
     }
 
@@ -676,12 +690,20 @@ STATIC mp_obj_t rp2_canhack_square_wave(mp_obj_t self_in)
 STATIC MP_DEFINE_CONST_FUN_OBJ_1(rp2_canhack_square_wave_obj, rp2_canhack_square_wave);
 
 
-STATIC mp_obj_t rp2_canhack_loopback(mp_obj_t self_in)
+STATIC mp_obj_t rp2_canhack_loopback(mp_uint_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_args)
 {
-    canhack_loopback();
+    static const mp_arg_t allowed_args[] = {
+            { MP_QSTR_fd,           MP_ARG_KW_ONLY  | MP_ARG_BOOL,  {.u_int = false} },
+    };
+
+    mp_arg_val_t args[MP_ARRAY_SIZE(allowed_args)];
+    mp_arg_parse_all(n_args - 1, pos_args + 1, kw_args, MP_ARRAY_SIZE(allowed_args), allowed_args, args);
+
+    bool fd = args[0].u_bool;
+    canhack_loopback(fd);
     return mp_const_none;
 }
-STATIC MP_DEFINE_CONST_FUN_OBJ_1(rp2_canhack_loopback_obj, rp2_canhack_loopback);
+STATIC MP_DEFINE_CONST_FUN_OBJ_KW(rp2_canhack_loopback_obj, 1, rp2_canhack_loopback);
 
 
 STATIC mp_obj_t rp2_canhack_get_clock(mp_obj_t self_in)

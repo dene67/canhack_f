@@ -136,7 +136,8 @@ void canhack_set_attack_masks(void);
 void canhack_send_square_wave(void);
 
 /// \brief Send to the CAN TX pin what is seen on the CAN RX pin (used for testing)
-void canhack_loopback(void);
+/// \param fd Whether to extend the loopback to 700 Bit Times for CAN FD loopback
+void canhack_loopback(bool fd);
 
 /// \brief Send a CAN frame to the CAN bus without waiting for 11 idle bits or syncing with SOF
 void canhack_send_raw_frame(void);
@@ -152,7 +153,7 @@ bool canhack_send_frame(uint32_t retries, bool second);
 /// \param split_time Time when phase 1 bit value is set to phase 2 bit value
 /// \param retries Number of times the frame should be re-entered into arbitration (after losing or after an error)
 /// \return
-bool canhack_send_janus_frame(ctr_t sync_time, ctr_t split_time, uint32_t retries);
+bool canhack_send_janus_frame(ctr_t sync_time, ctr_t split_time, ctr_t sync_time_fd, ctr_t split_time_fd, uint32_t retries);
 
 /// \brief Send a spoofed frame just after the target frame ends
 /// \param janus True if the spoof is a Janus frame
@@ -160,7 +161,7 @@ bool canhack_send_janus_frame(ctr_t sync_time, ctr_t split_time, uint32_t retrie
 /// \param split_time Time when phase 1 bit value is set to phase 2 bit value (if a Janus frame)
 /// \param retries Number of times the frame should be re-entered into arbitration (after losing or after an error)
 /// \return True if frame was sent OK, false if timed out or too many retries
-bool canhack_spoof_frame(bool janus, ctr_t sync_time, ctr_t split_time, uint32_t retries);
+bool canhack_spoof_frame(bool janus, ctr_t sync_time, ctr_t split_time, ctr_t sync_time_fd, ctr_t split_time_fd, uint32_t retries);
 
 /// \brief Overwrite the target frame (sender must be in error passive mode)
 /// \param loopback_offset Time to shift the bit pattern to align with the spoofed frame

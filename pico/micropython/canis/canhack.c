@@ -97,7 +97,7 @@ TIME_CRITICAL bool send_bits(ctr_t bit_end, ctr_t sample_point, struct canhack *
             
                 if (tx_index == frame->last_crc_bit + 2) {
                     cur_bit_time = BIT_TIME;
-                    bit_end = ADVANCE(bit_end- SAMPLE_TO_BIT_END_FD, SAMPLE_TO_BIT_END);
+                    bit_end = bit_end - SAMPLE_TO_BIT_END_FD + SAMPLE_TO_BIT_END;
                     sample_point = bit_end - SAMPLE_TO_BIT_END;
                 }
             }
@@ -132,13 +132,17 @@ TIME_CRITICAL bool send_bits(ctr_t bit_end, ctr_t sample_point, struct canhack *
 }
 
 // Sends a sequence of bits, returns true if lost arbitration or an error
-TIME_CRITICAL bool send_janus_bits(ctr_t bit_end, uint32_t sync_end, uint32_t split_end, struct canhack *canhack_p, uint8_t tx_index)
+TIME_CRITICAL bool send_janus_bits(ctr_t bit_end, uint32_t sync_time, uint32_t split_time, ctr_t sync_time_fd, ctr_t split_time_fd, struct canhack *canhack_p, uint8_t tx_index)
 {
     ctr_t now;
     uint8_t rx;
     uint8_t tx1;
     uint8_t tx2;
     uint8_t tx_bits = canhack_p->can_frame1.tx_bits > canhack_p->can_frame2.tx_bits ? canhack_p->can_frame1.tx_bits : canhack_p->can_frame2.tx_bits;
+    uint32_t cur_bit_time = BIT_TIME;
+
+    uint32_t sync_end = ADVANCE(bit_end, sync_time);
+    uint32_t split_end = ADVANCE(bit_end, split_time);
 
     for (;;) {
         for (;;) {
@@ -149,7 +153,7 @@ TIME_CRITICAL bool send_janus_bits(ctr_t bit_end, uint32_t sync_end, uint32_t sp
                 SET_CAN_TX_DOM();
                 // The next bit is set up after the time because the critical I/O operation has taken place now
                 tx1 = canhack_p->can_frame1.tx_bitstream[tx_index];
-                bit_end = ADVANCE(bit_end, BIT_TIME);
+                bit_end = ADVANCE(bit_end, cur_bit_time);
                 break;
             }
             if (canhack.canhack_timeout-- == 0) {
@@ -169,7 +173,17 @@ TIME_CRITICAL bool send_janus_bits(ctr_t bit_end, uint32_t sync_end, uint32_t sp
                     canhack_p->sent = true;
                     return false;
                 }
-                sync_end = ADVANCE(sync_end, BIT_TIME);
+                sync_end = ADVANCE(sync_end, cur_bit_time);
+                if ((tx_index == canhack_p->can_frame1.brs_bit + 1) & tx1) {
+                    cur_bit_time = BIT_TIME_FD;
+                    bit_end = bit_end - SAMPLE_TO_BIT_END_FD;
+                    sync_end = ADVANCE(bit_end, sync_time);
+                }
+                if (tx_index == canhack_p->can_frame1.last_crc_bit + 2) {
+                    cur_bit_time = BIT_TIME;
+                    bit_end = bit_end - SAMPLE_TO_BIT_END_FD + SAMPLE_TO_BIT_END;
+                    sync_end = ADVANCE(bit_end, sync_time);
+                }
                 break;
             }
             if (canhack.canhack_timeout-- == 0) {
@@ -182,7 +196,13 @@ TIME_CRITICAL bool send_janus_bits(ctr_t bit_end, uint32_t sync_end, uint32_t sp
             if (REACHED(now, split_end)) {
                 rx = GET_CAN_RX();
                 SET_CAN_TX(tx2);
-                split_end = ADVANCE(split_end, BIT_TIME);
+                split_end = ADVANCE(split_end, cur_bit_time);
+                if ((tx_index == canhack_p->can_frame2.brs_bit + 1) & tx2) {
+                    split_end = ADVANCE(bit_end, split_time_fd);
+                }
+                if (tx_index == canhack_p->can_frame2.last_crc_bit + 2) {
+                    split_end = ADVANCE(bit_end, split_end);
+                }
                 if (rx != tx1) {
                     SET_CAN_TX_REC();
                     return false;
@@ -221,7 +241,7 @@ TIME_CRITICAL void canhack_send_square_wave(void)
     }
 }
 
-TIME_CRITICAL void canhack_loopback(void)
+TIME_CRITICAL void canhack_loopback(bool fd)
 {
     uint8_t rx = 0U;
     uint8_t prev_rx;
@@ -242,6 +262,9 @@ TIME_CRITICAL void canhack_loopback(void)
     // Echo loopback for a number of bit times, starting with a falling edge
     // This should output on to the debug pin any incoming CAN frame
     uint i = 160U;
+    if (fd) {
+        i = 700U;   // Function has to run longer with fd frames (no brs -> more than 600 bit times)
+    }
     ctr_t bit_end = BIT_TIME;
     RESET_CLOCK(0);
     while(i > 0) {
@@ -312,7 +335,7 @@ SOF:
 // This sends a Janus frame, with sync_end being the relative time from the start of a bit when
 // the value for the first bit value is asserted, and first_end is the time relative from the start
 // of a bit when the second bit value is asserted.
-TIME_CRITICAL bool canhack_send_janus_frame(ctr_t sync_time, ctr_t split_time, uint32_t retries)
+TIME_CRITICAL bool canhack_send_janus_frame(ctr_t sync_time, ctr_t split_time, ctr_t sync_time_fd, ctr_t split_time_fd, uint32_t retries)
 {
     uint32_t prev_rx = 0;
     struct canhack *canhack_p = &canhack;
@@ -339,12 +362,10 @@ SOF:
             ctr_t bit_end = ADVANCE(sample_point, SAMPLE_TO_BIT_END);
             sample_point = ADVANCE(sample_point, BIT_TIME);
             if ((bitstream & 0x7feU) == 0x7feU) {
-                sync_time = ADVANCE(sync_time, bit_end);
-                split_time = ADVANCE(split_time, bit_end);
                 // 11 bits, either 10 recessive and dominant = SOF, or 11 recessive
                 // If the last bit was recessive then start index at 0, else start it at 1 to skip SOF
                 tx_index = rx ^ 1U;
-                if (send_janus_bits(bit_end, sync_time, split_time, canhack_p, tx_index)) {
+                if (send_janus_bits(bit_end, sync_time, split_time, sync_time_fd, split_time_fd, canhack_p, tx_index)) {
                     if (retries--) {
                         bitstream = 0; // Make sure we wait until EOF+IFS to trigger next attempt
                         goto SOF;
@@ -381,7 +402,7 @@ static void print_uint64(uint64_t n)
 #endif
 
 // Wait for a targeted frame and then transmit the spoof frame after winning arbitration next
-TIME_CRITICAL bool canhack_spoof_frame(bool janus, ctr_t sync_time, ctr_t split_time, uint32_t retries)
+TIME_CRITICAL bool canhack_spoof_frame(bool janus, ctr_t sync_time, ctr_t split_time, ctr_t sync_time_fd, ctr_t split_time_fd, uint32_t retries)
 {
     uint32_t prev_rx = 1U;
     struct canhack *canhack_p = &canhack;
@@ -409,7 +430,7 @@ TIME_CRITICAL bool canhack_spoof_frame(bool janus, ctr_t sync_time, ctr_t split_
             // Search for 10 recessive bits and a dominant bit = SOF plus the rest of the identifier, all in one test
             if ((bitstream & bitstream_mask) == bitstream_match) {
                 if (janus) {
-                    return canhack_send_janus_frame(sync_time, split_time, retries);
+                    return canhack_send_janus_frame(sync_time, split_time, sync_time_fd, split_time_fd, retries);
                 }
                 else {
                     return canhack_send_frame(retries, false);
@@ -873,7 +894,6 @@ void canhack_set_frame(uint32_t id_a, uint32_t id_b, bool rtr, bool ide, uint32_
                     frame->stuffing = false;
                 }
             }
-
             if (byte & 0x80U) {
                 add_bit(1U, frame, dlc);
             } 
@@ -904,8 +924,23 @@ void canhack_set_frame(uint32_t id_a, uint32_t id_b, bool rtr, bool ide, uint32_
     // CRC and STC for FD
     else {
 
+        // First FSB (last_data_bit adjustment if necessary)
+        if (frame->tx_bitstream[frame->last_data_bit]) {
+            add_raw_bit(0, true, frame);
+            if (frame->dominant_bits == 4) {
+                frame->last_data_bit++;
+            }
+        } 
+        else {
+            add_raw_bit(1U, true, frame);
+            if (frame->recessive_bits == 4) {
+                frame->last_data_bit++;
+            }
+        }
+
+        // set up gray-coded stuff count
         uint8_t stc = frame->stuff_count % 8;
-        uint8_t gc_stc;                         // set up gray-coded stuff count
+        uint8_t gc_stc;
         switch(stc) {
             case 1:
                 gc_stc = 0b00000001;
@@ -933,14 +968,6 @@ void canhack_set_frame(uint32_t id_a, uint32_t id_b, bool rtr, bool ide, uint32_
                 break;
         }
         uint8_t parity = frame->stuff_count & 0x1U;
-
-        // First FSB
-        if (frame->tx_bitstream[frame->last_data_bit]) {
-            add_raw_bit(0, true, frame);
-        } 
-        else {
-            add_raw_bit(1U, true, frame);
-        }
 
         // Stuff Count and Parity
         for (uint32_t i = 0; i < 3; i++) {
