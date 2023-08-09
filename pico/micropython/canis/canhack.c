@@ -177,7 +177,7 @@ TIME_CRITICAL bool send_janus_bits(ctr_t bit_end, uint32_t sync_time, uint32_t s
                 if ((tx_index == canhack_p->can_frame1.brs_bit + 1) & tx1) {
                     cur_bit_time = BIT_TIME_FD;
                     bit_end = bit_end - SAMPLE_TO_BIT_END_FD;
-                    sync_end = ADVANCE(bit_end, sync_time);
+                    sync_end = ADVANCE(bit_end, sync_time_fd);
                 }
                 if (tx_index == canhack_p->can_frame1.last_crc_bit + 2) {
                     cur_bit_time = BIT_TIME;
@@ -201,7 +201,7 @@ TIME_CRITICAL bool send_janus_bits(ctr_t bit_end, uint32_t sync_time, uint32_t s
                     split_end = ADVANCE(bit_end, split_time_fd);
                 }
                 if (tx_index == canhack_p->can_frame2.last_crc_bit + 2) {
-                    split_end = ADVANCE(bit_end, split_end);
+                    split_end = ADVANCE(bit_end, split_time);
                 }
                 if (rx != tx1) {
                     SET_CAN_TX_REC();
@@ -828,21 +828,17 @@ void canhack_set_frame(uint32_t id_a, uint32_t id_b, bool rtr, bool ide, uint32_
         // The RTR bit is the last bit in the arbitration field if an extended frame
         frame->last_arbitration_bit = frame->tx_bits - 1U;
 
-        // r1 (FDF in extended FD frames)
-        if (fd) {
-            add_bit(1U, frame, dlc);
-        } 
-        else {
-            add_bit(0, frame, dlc);
-        }
     }
     else {
         // If IDE = 0 then the last arbitration field bit is the RTR
     }
 
-    // FDF for non extended FD frames
-    if (fd & !ide) {
+    // r1 (FDF in FD frames)
+    if (fd) {
         add_bit(1U, frame, dlc);
+    } 
+    else {
+        add_bit(0, frame, dlc);
     }
 
     // r0 (res in FD frames)
@@ -854,12 +850,12 @@ void canhack_set_frame(uint32_t id_a, uint32_t id_b, bool rtr, bool ide, uint32_
         // BRS bit rate switch
         if (brs) {
             add_bit(1U, frame, dlc);
+            frame->brs_bit = frame->tx_bits - 1U;
         } 
         else {
             add_bit(0, frame, dlc);
+            frame->brs_bit = CANHACK_MAX_BITS;
         }
-
-        frame->brs_bit = frame->tx_bits - 1U;
 
         // ESI (error active)
         if (esi) {
@@ -937,6 +933,7 @@ void canhack_set_frame(uint32_t id_a, uint32_t id_b, bool rtr, bool ide, uint32_
                 frame->last_data_bit++;
             }
         }
+        frame->stuff_count--;
 
         // set up gray-coded stuff count
         uint8_t stc = frame->stuff_count % 8;
@@ -1055,7 +1052,7 @@ canhack_frame_t *canhack_get_frame(bool second)
 // Sets the CAN hack masks from frame 1 (frame 2 is only used in the Janus attack)
 void canhack_set_attack_masks(void)
 {
-    canhack.attack_parameters.n_frame_match_bits = canhack.can_frame1.last_arbitration_bit + 1U;
+    canhack.attack_parameters.n_frame_match_bits = canhack.can_frame1.last_arbitration_bit + 2U;
     canhack.attack_parameters.bitstream_mask = (1ULL << (canhack.attack_parameters.n_frame_match_bits + 10U)) - 1ULL;
     canhack.attack_parameters.bitstream_match = 0x3ffULL;
     for (uint32_t i = 0; i < canhack.attack_parameters.n_frame_match_bits; i++) {
