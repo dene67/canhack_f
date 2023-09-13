@@ -450,12 +450,10 @@ TIME_CRITICAL bool canhack_spoof_frame(bool janus, ctr_t sync_time, ctr_t split_
 TIME_CRITICAL bool canhack_spoof_frame_error_passive(uint32_t loopback_offset)
 {
     uint32_t prev_rx = 1U;
-    uint32_t short_rx = 0;
     struct canhack *canhack_p = &canhack;
     uint64_t bitstream = 0;
     uint64_t bitstream_mask = canhack_p->attack_parameters.bitstream_mask;
     uint64_t bitstream_match = canhack_p->attack_parameters.bitstream_match;
-    uint64_t brs_over_match = 0x3f; //after 6 equal bits bit stuffing rules would be violated -> fast data is over
 
     uint8_t rx;
     RESET_CLOCK(0);
