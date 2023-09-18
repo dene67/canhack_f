@@ -82,7 +82,7 @@
 #include CANHACK_BOARD_H
 #include <stdio.h>
 
-#define CANHACK_MAX_BITS ((CANHACK_FD == 1 ? 700U : 160U))
+#define CANHACK_MAX_BITS    700U
 
 /// Structure that defines a CAN frame parameters
 typedef struct {

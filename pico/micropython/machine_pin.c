@@ -112,7 +112,7 @@ STATIC const machine_pin_obj_t machine_pin_obj[NUM_BANK0_GPIOS] = {
 #include <inttypes.h>
 
 #ifdef CAN
-#include "canapi.h"
+#include "canis/candrivers/canapi.h"
 #endif
 
 // Mask with "1" indicating that the corresponding pin is in simulated open-drain mode.

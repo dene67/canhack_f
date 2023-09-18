@@ -138,7 +138,7 @@ TIME_CRITICAL bool send_janus_bits(ctr_t bit_end, uint32_t sync_time, uint32_t s
     uint8_t rx;
     uint8_t tx1;
     uint8_t tx2;
-    uint8_t tx_bits = canhack_p->can_frame1.tx_bits > canhack_p->can_frame2.tx_bits ? canhack_p->can_frame1.tx_bits : canhack_p->can_frame2.tx_bits;
+    uint16_t tx_bits = canhack_p->can_frame1.tx_bits > canhack_p->can_frame2.tx_bits ? canhack_p->can_frame1.tx_bits : canhack_p->can_frame2.tx_bits;
     uint32_t cur_bit_time = BIT_TIME;
 
     uint32_t sync_end = ADVANCE(bit_end, sync_time);
@@ -174,7 +174,7 @@ TIME_CRITICAL bool send_janus_bits(ctr_t bit_end, uint32_t sync_time, uint32_t s
                     return false;
                 }
                 sync_end = ADVANCE(sync_end, cur_bit_time);
-                /*if ((tx_index == canhack_p->can_frame1.brs_bit + 1) & tx1) {
+                if ((tx_index == canhack_p->can_frame1.brs_bit + 1) & tx1) {
                     cur_bit_time = BIT_TIME_FD;
                     bit_end = bit_end - SAMPLE_TO_BIT_END_FD;
                     sync_end = ADVANCE(bit_end, sync_time_fd);
@@ -183,7 +183,7 @@ TIME_CRITICAL bool send_janus_bits(ctr_t bit_end, uint32_t sync_time, uint32_t s
                     cur_bit_time = BIT_TIME;
                     bit_end = bit_end - SAMPLE_TO_BIT_END_FD + SAMPLE_TO_BIT_END;
                     sync_end = ADVANCE(bit_end, sync_time);
-                }*/
+                }
                 break;
             }
             if (canhack.canhack_timeout-- == 0) {

@@ -52,7 +52,9 @@
 #include "canis/rp2_can.h"
 #endif
 
+#ifdef MIN
 #include "canis/rp2_min.h"
+#endif
 
 #ifdef CRYPTOCAN
 #include "canis/rp2_hsm.h"
@@ -131,8 +133,9 @@ int main(int argc, char **argv) {
         #ifdef CAN
         can_init();
         #endif
-        // TODO make MIN conditionally included        
+        #ifdef RP2MIN
         min_init();
+        #endif
         #ifdef CRYPTOCAN
         hsm_init();
         #endif
@@ -177,8 +180,9 @@ int main(int argc, char **argv) {
         #ifdef CAN
         can_deinit();
         #endif
-        // TODO make MIN conditionally included
+        #ifdef RP2MIN
         min_deinit();
+        #endif
         #ifdef CRYPTOCAN
         hsm_deinit();
         #endif

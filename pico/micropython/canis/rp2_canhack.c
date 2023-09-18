@@ -218,8 +218,12 @@ STATIC mp_obj_t rp2_canhack_set_frame(mp_uint_t n_args, const mp_obj_t *pos_args
         data[i] = 0x0;
     }
 
+    if (rtr && fd) {
+        nlr_raise(mp_obj_new_exception_msg_varg(&mp_type_ValueError, "CAN FD does not support remote frames"));
+    }
+
     // DLC can be set if remote, but must have no payload
-    if(rtr && (len > 0)) {
+    if (rtr && (len > 0)) {
         nlr_raise(mp_obj_new_exception_msg_varg(&mp_type_ValueError, "Remote frames cannot have a payload"));
     }
     // 8 byte frames max

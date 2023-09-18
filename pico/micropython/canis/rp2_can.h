@@ -19,7 +19,7 @@
 
 #include "py/obj.h"
 
-#include "canapi.h"
+#include "candrivers/canapi.h"
 
 #ifdef CAN_DEBUG
 #define CAN_DEBUG_PRINT(fmt, args...)   mp_printf(MP_PYTHON_PRINTER, fmt, ##args)
