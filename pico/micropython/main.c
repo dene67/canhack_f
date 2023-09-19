@@ -52,7 +52,7 @@
 #include "canis/rp2_can.h"
 #endif
 
-#ifdef MIN
+#ifdef RP2MIN
 #include "canis/rp2_min.h"
 #endif
 

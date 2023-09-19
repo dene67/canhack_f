@@ -33,7 +33,9 @@
 #include <canis/rp2_cryptocan.h>
 #endif
 
+#ifdef RP2MIN
 #include <canis/rp2_min.h>
+#endif
 
 #include "py/runtime.h"
 #include "drivers/dht/dht.h"
