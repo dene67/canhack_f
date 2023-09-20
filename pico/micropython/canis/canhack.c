@@ -197,12 +197,12 @@ TIME_CRITICAL bool send_janus_bits(ctr_t bit_end, uint32_t sync_time, uint32_t s
                 rx = GET_CAN_RX();
                 SET_CAN_TX(tx2);
                 split_end = ADVANCE(split_end, cur_bit_time);
-                /*if ((tx_index == canhack_p->can_frame2.brs_bit + 1) & tx2) {
+                if ((tx_index == canhack_p->can_frame2.brs_bit + 1) & tx2) {
                     split_end = ADVANCE(bit_end, split_time_fd);
                 }
                 if (tx_index == canhack_p->can_frame2.last_crc_bit + 2) {
                     split_end = ADVANCE(bit_end, split_time);
-                }*/
+                }
                 if (rx != tx1) {
                     SET_CAN_TX_REC();
                     return false;
