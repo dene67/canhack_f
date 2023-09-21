@@ -207,8 +207,8 @@ if(CAN OR CRYPTOCAN)
     list(APPEND MICROPY_SOURCE_PORT
         ${PROJECT_SOURCE_DIR}/canis/canhack.c
         ${PROJECT_SOURCE_DIR}/canis/rp2_canhack.c
-        ${CANDRIVERS_SOURCE_LIB}
         ${PROJECT_SOURCE_DIR}/canis/rp2_can.c
+        ${CANDRIVERS_SOURCE_LIB}
     )
     list(APPEND MICROPY_SOURCE_QSTR
         ${PROJECT_SOURCE_DIR}/canis/rp2_canhack.c
