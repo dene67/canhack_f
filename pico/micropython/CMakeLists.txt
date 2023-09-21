@@ -72,10 +72,6 @@ set(MICROPY_QSTRDEFS_PORT
     ${PROJECT_SOURCE_DIR}/qstrdefsport.h
 )
 
-set(MIN_SOURCE_LIB
-    ${MICROPY_DIR}/lib/min/target/min.c
-)
-
 set(HSM_SOURCE_LIB
     ${CC_HSM_PATH}/swshe/cmac.c
     ${CC_HSM_PATH}/swshe/cmacdyn.c
