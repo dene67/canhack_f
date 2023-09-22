@@ -95,7 +95,7 @@ TIME_CRITICAL bool send_bits(ctr_t bit_end, ctr_t sample_point, struct canhack *
                     sample_point = bit_end - SAMPLE_TO_BIT_END_FD;
                 } 
             
-                if (tx_index == frame->last_crc_bit + 2) {
+                if (tx_index == frame->last_crc_bit + 2 & frame->brs) {
                     cur_bit_time = BIT_TIME;
                     bit_end = bit_end - SAMPLE_TO_BIT_END_FD + SAMPLE_TO_BIT_END;
                     sample_point = bit_end - SAMPLE_TO_BIT_END;
@@ -494,8 +494,8 @@ TIME_CRITICAL bool canhack_error_attack(uint32_t repeat, bool inject_error, uint
     uint64_t bitstream64_mask = canhack_p->attack_parameters.bitstream_mask;
     uint64_t bitstream64_match = canhack_p->attack_parameters.bitstream_match;
     bool brs = canhack_p->can_frame1.brs;
-    uint64_t eof_mask_brs = eof_mask << 2;
-    uint64_t eof_match_brs = eof_match << 2;
+    uint64_t eof_mask_brs = (eof_mask << 2) | 4;
+    uint64_t eof_match_brs = (eof_match << 2) | 4;
 
     uint8_t rx;
     RESET_CLOCK(0);
