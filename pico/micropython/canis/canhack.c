@@ -497,7 +497,7 @@ TIME_CRITICAL bool canhack_error_attack(uint32_t repeat, bool inject_error, uint
     uint64_t eof_mask_brs = 1;
     uint64_t eof_match_brs = 1;
     uint64_t tmp_mask = eof_mask;
-    for(;;)
+    for(;;) {
         if (tmp_mask & 1U) {
             eof_mask_brs = (eof_mask_brs <<= 2) | 3;
             tmp_mask >>= 1;
@@ -506,7 +506,7 @@ TIME_CRITICAL bool canhack_error_attack(uint32_t repeat, bool inject_error, uint
         }
     }
     uint64_t tmp_match = eof_match;
-    for(;;)
+    for(;;) {
         if (tmp_match & 1U) {
             eof_match_brs = (eof_match_brs <<= 2) | 3;
             tmp_match >>= 1;
