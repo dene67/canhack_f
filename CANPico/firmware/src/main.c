@@ -115,6 +115,12 @@ int main(int argc, char **argv) {
     mp_thread_init();
     #endif
 
+    #ifdef CANHACK_FD
+    // Set System Clock to 250 MHz to enable FD support
+    set_sys_clock_khz(250000, true);
+    #endif
+
+
     // Start and initialise the RTC
     datetime_t t = {
         .year = 2021,

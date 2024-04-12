@@ -122,6 +122,13 @@ if (EXISTS MIN_PROTOCOL)
     )
 endif()
 
+if (EXISTS CANHACK_FD)
+    message(STATUS "CANHACK_FD")
+    target_compile_definitions(${MICROPY_TARGET} PRIVATE
+        CANHACK_FD=1
+    )
+endif()
+
 if(CAN)
     message(STATUS "CAN enabled")
     set(CANDRIVERS_PATH ${MICROPY_DIR}/lib/canis-can-sdk)
