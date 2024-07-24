@@ -93,6 +93,11 @@ int main(int argc, char **argv) {
     // This is a tickless port, interrupts should always trigger SEV.
     SCB->SCR |= SCB_SCR_SEVONPEND_Msk;
 
+    // Set System Clock to 250 MHz to enable FD support
+    #ifdef CANHACK_FD
+    set_sys_clock_khz(250000, true);
+    #endif
+
     #if MICROPY_HW_ENABLE_UART_REPL
     bi_decl(bi_program_feature("UART REPL"))
     setup_default_uart();
@@ -113,11 +118,6 @@ int main(int argc, char **argv) {
     #if MICROPY_PY_THREAD
     bi_decl(bi_program_feature("thread support"))
     mp_thread_init();
-    #endif
-
-    #ifdef CANHACK_FD
-    // Set System Clock to 250 MHz to enable FD support
-    set_sys_clock_khz(250000, true);
     #endif
 
 

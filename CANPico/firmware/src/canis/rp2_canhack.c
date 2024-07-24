@@ -409,6 +409,7 @@ STATIC mp_obj_t rp2_canhack_send_frame(mp_uint_t n_args, const mp_obj_t *pos_arg
         if (success) {
             repeat--;
         }
+        
         enable_irq();
         if (!success || repeat == 0) {
             break;
@@ -416,6 +417,15 @@ STATIC mp_obj_t rp2_canhack_send_frame(mp_uint_t n_args, const mp_obj_t *pos_arg
     }
     // Put the 11 recessive bits back
     frame->tx_bits += 11U;
+    canhack_frame_t *framedone = canhack_get_frame(second);
+    ctr_t temp;
+    for (uint16_t i = 0; i < CANHACK_MAX_BITS; i++)
+    {
+        temp = framedone->times[i];
+        if (temp != 0) {
+            mp_printf(MP_PYTHON_PRINTER, "%ld \n", temp);
+        }
+    }
 
     return mp_const_none;
 }
@@ -707,8 +717,8 @@ ctr_t ts[CANHACK_MAX_BITS];
 
 __attribute__((noinline, long_call, section(".time_critical"))) void send_raw_frame(canhack_frame_t *frame )
 {
-    uint8_t tx_index = 1U;
-    uint8_t ts_index = 3U;
+    uint16_t tx_index = 1U;
+    uint16_t ts_index = 3U;
     ctr_t bit_end;
     uint8_t tx = frame->tx_bitstream[tx_index++];
 

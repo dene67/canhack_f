@@ -92,6 +92,7 @@
 typedef struct {
     uint8_t tx_bitstream[CANHACK_MAX_BITS];     ///< The bitstream of the CAN frame
     bool stuff_bit[CANHACK_MAX_BITS];           ///< Indicates if the corresponding bit is a stuff bit
+    ctr_t times[CANHACK_MAX_BITS];
     uint32_t tx_bits;                           ///< Number of  bits in the frame
     uint32_t tx_arbitration_bits;               ///< Number of bits in arbitartion (including stuff bits); the fields are ID A + RTR (standard) or ID A + SRR + IDE + ID B + RTR (extended)
 
@@ -113,6 +114,7 @@ typedef struct {
     uint8_t stuff_count;                        ///< Stuff count for CAN FD
     bool stuffing;                              ///< True if stuffing enabled
     bool crcing;                                ///< True if CRCing enabled
+
 } canhack_frame_t;
 
 /// \brief Initialize CANHack toolkit

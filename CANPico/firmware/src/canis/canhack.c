@@ -78,6 +78,7 @@ TIME_CRITICAL bool send_bits(ctr_t bit_end, ctr_t sample_point, struct canhack *
     uint8_t tx = frame->tx_bitstream[tx_index++];
     uint8_t cur_tx = tx;
     uint16_t cur_bit_time = BIT_TIME;
+    uint16_t timecnt = 0;
 
     for (;;) {
         now = GET_CLOCK();
@@ -85,10 +86,11 @@ TIME_CRITICAL bool send_bits(ctr_t bit_end, ctr_t sample_point, struct canhack *
         // Bit end is scanned first because it needs to execute as close to the time as possible
         if (REACHED(now, bit_end)) {
             SET_CAN_TX(tx);
+            frame->times[timecnt++] = now;
             bit_end = ADVANCE(bit_end, cur_bit_time);
 
             // Fast data switch on and off
-            if (frame->fd) {
+            if (frame->brs) {
                 if ((tx_index == frame->brs_bit + 1) & tx) {
                     cur_bit_time = BIT_TIME_FD;
                     bit_end = bit_end - SAMPLE_TO_BIT_END_FD;
@@ -101,6 +103,17 @@ TIME_CRITICAL bool send_bits(ctr_t bit_end, ctr_t sample_point, struct canhack *
                     sample_point = bit_end - SAMPLE_TO_BIT_END;
                 }
             }
+
+            // Reset clock to avoid timer wrap
+            /*if (REACHED(now, 65000)) {
+                RESET_CLOCK(0);
+                bit_end = cur_bit_time;
+                if (cur_bit_time == BIT_TIME) {
+                    sample_point = SAMPLE_POINT_OFFSET;
+                } else {
+                    sample_point = SAMPLE_POINT_OFFSET_FD;
+                }
+            }*/
 
             // The next bit is set up after the time because the critical I/O operation has taken place now
             cur_tx = tx;
@@ -125,7 +138,6 @@ TIME_CRITICAL bool send_bits(ctr_t bit_end, ctr_t sample_point, struct canhack *
         }
 
         if (canhack.canhack_timeout-- == 0) {
-            SET_CAN_TX_REC();
             return false;
         }
     }
@@ -884,7 +896,7 @@ void canhack_set_frame(uint32_t id_a, uint32_t id_b, bool rtr, bool ide, uint32_
             frame->brs_bit = CANHACK_MAX_BITS;
         }
 
-        // ESI (error active)
+        // ESI error state indicator
         if (esi) {
             add_bit(0, frame, dlc);
         } 

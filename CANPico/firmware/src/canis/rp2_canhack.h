@@ -57,7 +57,7 @@
 #define     FALLING_EDGE_RECALIBRATE        (62U)       // Time adjusted for 250 MHz
 #define     FD_CONFIGURED                   true
 #else
-#define     BIT_TIME                        (249)
+#define     BIT_TIME                        (249U)
 #define     SAMPLE_POINT_OFFSET             (150U)
 #define     DEFAULT_LOOPBACK_OFFSET         (93U)
 #define     FALLING_EDGE_RECALIBRATE        (31U)
@@ -79,7 +79,7 @@
 #endif*/
 
 // Size of the counter (usually 16-bit or 32-bit)
-typedef uint32_t ctr_t;
+typedef uint16_t ctr_t;
 
 // These are macros that are inlined because the compiler cannot be trusted to inline and on the
 // RP2040 with XIP flash it is STRICTLY NECESSARY to inline them into a time critical function.
