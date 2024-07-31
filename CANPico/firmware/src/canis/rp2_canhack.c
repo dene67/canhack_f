@@ -202,6 +202,12 @@ STATIC mp_obj_t rp2_canhack_set_frame(mp_uint_t n_args, const mp_obj_t *pos_args
         }
     }
 
+    for (uint16_t i = 0; i < size; i++) {
+        if (i >= len) {
+            data[i] = 0;
+        }
+    }
+
     // DLC can be set if remote, but must have no payload
     if (rtr && (len > 0)) {
         nlr_raise(mp_obj_new_exception_msg_varg(&mp_type_ValueError, "Remote frames cannot have a payload"));
@@ -417,15 +423,6 @@ STATIC mp_obj_t rp2_canhack_send_frame(mp_uint_t n_args, const mp_obj_t *pos_arg
     }
     // Put the 11 recessive bits back
     frame->tx_bits += 11U;
-    canhack_frame_t *framedone = canhack_get_frame(second);
-    ctr_t temp;
-    for (uint16_t i = 0; i < CANHACK_MAX_BITS; i++)
-    {
-        temp = framedone->times[i];
-        if (temp != 0) {
-            mp_printf(MP_PYTHON_PRINTER, "%ld \n", temp);
-        }
-    }
 
     return mp_const_none;
 }

@@ -77,8 +77,6 @@ TIME_CRITICAL bool send_bits(ctr_t bit_end, ctr_t sample_point, struct canhack *
     uint32_t rx;
     uint8_t tx = frame->tx_bitstream[tx_index++];
     uint8_t cur_tx = tx;
-    uint16_t cur_bit_time = BIT_TIME;
-    uint16_t timecnt = 0;
 
     for (;;) {
         now = GET_CLOCK();
@@ -86,34 +84,55 @@ TIME_CRITICAL bool send_bits(ctr_t bit_end, ctr_t sample_point, struct canhack *
         // Bit end is scanned first because it needs to execute as close to the time as possible
         if (REACHED(now, bit_end)) {
             SET_CAN_TX(tx);
-            frame->times[timecnt++] = now;
-            bit_end = ADVANCE(bit_end, cur_bit_time);
-
-            // Fast data switch on and off
-            if (frame->brs) {
-                if ((tx_index == frame->brs_bit + 1) & tx) {
-                    cur_bit_time = BIT_TIME_FD;
-                    bit_end = bit_end - SAMPLE_TO_BIT_END_FD;
-                    sample_point = bit_end - SAMPLE_TO_BIT_END_FD;
-                } 
+            bit_end = ADVANCE(bit_end, BIT_TIME);
             
-                if (tx_index == frame->last_crc_bit + 2) {
-                    cur_bit_time = BIT_TIME;
-                    bit_end = bit_end - SAMPLE_TO_BIT_END_FD + SAMPLE_TO_BIT_END;
-                    sample_point = bit_end - SAMPLE_TO_BIT_END;
+            // Fast data switch
+            if ((tx_index == frame->brs_bit + 1) & tx) {
+                bit_end = bit_end - SAMPLE_TO_BIT_END_FD;
+                sample_point = bit_end - SAMPLE_TO_BIT_END_FD;
+
+                cur_tx = tx;
+                tx = frame->tx_bitstream[tx_index++];
+
+                for (;;) {
+                    now = GET_CLOCK();
+
+                    // Bit end is scanned first because it needs to execute as close to the time as possible
+                    if (REACHED(now, bit_end)) {
+                        SET_CAN_TX(tx);
+                        bit_end = ADVANCE(bit_end, BIT_TIME_FD);
+
+                        if (tx_index >= (frame->last_crc_bit + 2)) {
+                            bit_end = bit_end - SAMPLE_TO_BIT_END_FD + SAMPLE_TO_BIT_END;
+                            sample_point = bit_end - SAMPLE_TO_BIT_END;
+
+                            cur_tx = tx;
+                            tx = frame->tx_bitstream[tx_index++];
+
+                            break;
+                        }
+
+                        // The next bit is set up after the time because the critical I/O operation has taken place now
+                        cur_tx = tx;
+                        tx = frame->tx_bitstream[tx_index++];
+                        
+                    }
+
+                    if (REACHED(now, sample_point)) {
+                        rx = GET_CAN_RX();
+                        if (rx != cur_tx) {
+                                // If arbitration then lost, or an error, then give up and go back to SOF
+                                SET_CAN_TX_REC()
+                                return true;
+                        }
+                        sample_point = ADVANCE(sample_point, BIT_TIME_FD);
+                    }
+
+                    if (canhack.canhack_timeout-- == 0) {
+                        return false;
+                    }
                 }
             }
-
-            // Reset clock to avoid timer wrap
-            /*if (REACHED(now, 65000)) {
-                RESET_CLOCK(0);
-                bit_end = cur_bit_time;
-                if (cur_bit_time == BIT_TIME) {
-                    sample_point = SAMPLE_POINT_OFFSET;
-                } else {
-                    sample_point = SAMPLE_POINT_OFFSET_FD;
-                }
-            }*/
 
             // The next bit is set up after the time because the critical I/O operation has taken place now
             cur_tx = tx;
@@ -134,7 +153,7 @@ TIME_CRITICAL bool send_bits(ctr_t bit_end, ctr_t sample_point, struct canhack *
                     SET_CAN_TX_REC()
                     return true;
             }
-            sample_point = ADVANCE(sample_point, cur_bit_time);
+            sample_point = ADVANCE(sample_point, BIT_TIME);
         }
 
         if (canhack.canhack_timeout-- == 0) {
